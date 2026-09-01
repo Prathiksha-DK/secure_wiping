@@ -1,0 +1,9 @@
+
+{
+  "master_dashboard_background": {
+    "src": "https://picsum.photos/seed/citybg/1200/800",
+    "width": 1200,
+    "height": 800,
+    "hint": "futuristic cityscape"
+  }
+}

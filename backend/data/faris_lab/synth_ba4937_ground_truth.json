@@ -1,0 +1,273 @@
+{
+  "db_filename": "synth_ba4937_ground_truth.db",
+  "db_path": "D:\\wiping\\backend\\data\\faris_lab\\synth_ba4937_ground_truth.db",
+  "tables": {
+    "users": [
+      {
+        "id": 1,
+        "username": "alice_sec",
+        "email": "alice@enterprise.org",
+        "role": "Administrator",
+        "created_at": "2026-08-15 08:30:00"
+      },
+      {
+        "id": 2,
+        "username": "bob_ops",
+        "email": "bob@enterprise.org",
+        "role": "Operator",
+        "created_at": "2026-08-15 09:15:00"
+      },
+      {
+        "id": 3,
+        "username": "charlie_audit",
+        "email": "charlie@enterprise.org",
+        "role": "Auditor",
+        "created_at": "2026-08-15 10:00:00"
+      },
+      {
+        "id": 4,
+        "username": "david_dev",
+        "email": "david@enterprise.org",
+        "role": "Engineer",
+        "created_at": "2026-08-15 11:20:00"
+      },
+      {
+        "id": 5,
+        "username": "eva_analyst",
+        "email": "eva@enterprise.org",
+        "role": "Forensic Specialist",
+        "created_at": "2026-08-15 12:45:00"
+      }
+    ],
+    "messages": [
+      {
+        "id": 1,
+        "sender": "alice_sec",
+        "recipient": "bob_ops",
+        "content": "Confirming server maintenance window at 22:00 UTC [Seq #1]",
+        "sent_at": "2026-08-20 14:10:00"
+      },
+      {
+        "id": 2,
+        "sender": "bob_ops",
+        "recipient": "alice_sec",
+        "content": "Backup snapshot completed successfully before routine wipe [Seq #2]",
+        "sent_at": "2026-08-20 14:15:22"
+      },
+      {
+        "id": 3,
+        "sender": "charlie_audit",
+        "recipient": "alice_sec",
+        "content": "Audit certificate request for compliance review [Seq #3]",
+        "sent_at": "2026-08-21 09:04:10"
+      },
+      {
+        "id": 4,
+        "sender": "david_dev",
+        "recipient": "bob_ops",
+        "content": "Deploying forensic module FARIS to production cluster [Seq #4]",
+        "sent_at": "2026-08-21 10:30:00"
+      },
+      {
+        "id": 5,
+        "sender": "eva_analyst",
+        "recipient": "charlie_audit",
+        "content": "Chain of custody log verified with SHA-256 integrity [Seq #5]",
+        "sent_at": "2026-08-21 16:45:11"
+      },
+      {
+        "id": 6,
+        "sender": "alice_sec",
+        "recipient": "david_dev",
+        "content": "Security verification test scheduled for tomorrow [Seq #6]",
+        "sent_at": "2026-08-22 08:12:30"
+      },
+      {
+        "id": 7,
+        "sender": "bob_ops",
+        "recipient": "eva_analyst",
+        "content": "Target device HP v236w connected to port 8743 [Seq #7]",
+        "sent_at": "2026-08-22 11:00:00"
+      },
+      {
+        "id": 8,
+        "sender": "charlie_audit",
+        "recipient": "david_dev",
+        "content": "Report generated for forensic case archive [Seq #8]",
+        "sent_at": "2026-08-22 15:20:00"
+      },
+      {
+        "id": 9,
+        "sender": "alice_sec",
+        "recipient": "bob_ops",
+        "content": "Confirming server maintenance window at 22:00 UTC [Seq #9]",
+        "sent_at": "2026-08-20 14:10:00"
+      },
+      {
+        "id": 10,
+        "sender": "bob_ops",
+        "recipient": "alice_sec",
+        "content": "Backup snapshot completed successfully before routine wipe [Seq #10]",
+        "sent_at": "2026-08-20 14:15:22"
+      },
+      {
+        "id": 11,
+        "sender": "charlie_audit",
+        "recipient": "alice_sec",
+        "content": "Audit certificate request for compliance review [Seq #11]",
+        "sent_at": "2026-08-21 09:04:10"
+      },
+      {
+        "id": 12,
+        "sender": "david_dev",
+        "recipient": "bob_ops",
+        "content": "Deploying forensic module FARIS to production cluster [Seq #12]",
+        "sent_at": "2026-08-21 10:30:00"
+      },
+      {
+        "id": 13,
+        "sender": "eva_analyst",
+        "recipient": "charlie_audit",
+        "content": "Chain of custody log verified with SHA-256 integrity [Seq #13]",
+        "sent_at": "2026-08-21 16:45:11"
+      },
+      {
+        "id": 14,
+        "sender": "alice_sec",
+        "recipient": "david_dev",
+        "content": "Security verification test scheduled for tomorrow [Seq #14]",
+        "sent_at": "2026-08-22 08:12:30"
+      },
+      {
+        "id": 15,
+        "sender": "bob_ops",
+        "recipient": "eva_analyst",
+        "content": "Target device HP v236w connected to port 8743 [Seq #15]",
+        "sent_at": "2026-08-22 11:00:00"
+      }
+    ],
+    "transactions": [
+      {
+        "id": 1,
+        "account_id": 1000,
+        "amount": 150.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787200000
+      },
+      {
+        "id": 2,
+        "account_id": 1001,
+        "amount": 174.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787203600
+      },
+      {
+        "id": 3,
+        "account_id": 1002,
+        "amount": 199.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787207200
+      },
+      {
+        "id": 4,
+        "account_id": 1003,
+        "amount": 223.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787210800
+      },
+      {
+        "id": 5,
+        "account_id": 1004,
+        "amount": 248.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787214400
+      },
+      {
+        "id": 6,
+        "account_id": 1000,
+        "amount": 272.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787218000
+      },
+      {
+        "id": 7,
+        "account_id": 1001,
+        "amount": 297.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787221600
+      },
+      {
+        "id": 8,
+        "account_id": 1002,
+        "amount": 321.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787225200
+      },
+      {
+        "id": 9,
+        "account_id": 1003,
+        "amount": 346.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787228800
+      },
+      {
+        "id": 10,
+        "account_id": 1004,
+        "amount": 370.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787232400
+      },
+      {
+        "id": 11,
+        "account_id": 1000,
+        "amount": 395.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787236000
+      },
+      {
+        "id": 12,
+        "account_id": 1001,
+        "amount": 419.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787239600
+      },
+      {
+        "id": 13,
+        "account_id": 1002,
+        "amount": 444.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787243200
+      },
+      {
+        "id": 14,
+        "account_id": 1003,
+        "amount": 468.5,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787246800
+      },
+      {
+        "id": 15,
+        "account_id": 1004,
+        "amount": 493.0,
+        "currency": "USD",
+        "status": "COMPLETED",
+        "tx_time": 1787250400
+      }
+    ]
+  },
+  "total_records": 35
+}

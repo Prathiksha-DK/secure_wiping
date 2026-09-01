@@ -1,0 +1,24 @@
+{
+    "reportId": "072f194e-07cb-4202-bb91-89919c28beb6",
+    "deviceName": "LAPTOP-RJQSB2B3",
+    "deviceSerial": "5CD4228H9N",
+    "deviceType": "Removable Media",
+    "wipeMethod": "Madhan",
+    "wipeStatus": "Completed",
+    "startTime": "2025-09-28 21:56:43",
+    "endTime": "2025-09-28 21:56:43",
+    "filesVerified": 10,
+    "verificationHashes": [
+        "dcef0a787c4654ac5c085fafa3a1e12d60d6f42e0d259c38378b61ef64295fa2",
+        "bf47e08c0e3b5972acffd264eed62b8f650c51e6cca9cea7c19a7999c21e0aae",
+        "46a68c17598388910cb09769ecc6abd2bcd368ee899aadd4ee031bc6d0a1abe1",
+        "9e3c8a25e01e810489f91b962840a9d5f4787113b97e7146832592540d62654f",
+        "b26bdbfb66685e87cbaf7add51a694ac76821df0993792247d158594cf78ddc2",
+        "f034d3eee0898e87a030a9d70c24d46832c32a2d8e4e6fb5f8320c70c36db362",
+        "cad363d1bb69503cf2c17fd8a6196fe36bc249e8464f96221d61928bf575c1a5",
+        "e0bf34b6d9cd17710365c360af3bfa5a0f6fa7e7c18ed5e230fcfc120a67a47e",
+        "01a0d9d0a392000dd23dd59591441647a2aa3c1b33e507b15ae20a7b736691b8",
+        "803ffe28eab28d30d0f993aea2d78746fee274e8e65be288c535360735df4ee6"
+    ],
+    "hashFile": "diverse_drive_hashes.json"
+}

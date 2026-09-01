@@ -1,0 +1,11 @@
+{
+    "reportId": "70060a6a-5b5a-474d-9310-d2ae9c30843d",
+    "deviceName": "Laptop-01",
+    "deviceSerial": "SN123456789",
+    "deviceType": "SSD",
+    "wipeMethod": "DoD 3-pass",
+    "wipeStatus": "Completed",
+    "startTime": "2025-09-28 22:20:18",
+    "endTime": "2025-09-28 22:20:18",
+    "verificationHash": "a464b63bd4b3c5626ea47571a712327b7c58acd4761f232a0a5186726d22e1f1"
+}
