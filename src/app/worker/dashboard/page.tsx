@@ -67,27 +67,18 @@ type Stats = {
   recentWipes: any[];
 };
 
-type ADStatus = {
-  connected: boolean;
-  domain: string;
-  domainController: string;
-  lastSync: string;
-};
-
 export default function DashboardPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [adStatus, setAdStatus] = useState<ADStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchAll() {
       setLoading(true);
       try {
-        const [devRes, statsRes, adRes] = await Promise.all([
+        const [devRes, statsRes] = await Promise.all([
           fetch(`${API_BASE}/api/devices`, { cache: "no-store" }).catch(() => null),
           fetch(`${API_BASE}/api/stats`, { cache: "no-store" }).catch(() => null),
-          fetch(`${API_BASE}/api/ad/status`, { cache: "no-store" }).catch(() => null),
         ]);
 
         if (devRes?.ok) {
@@ -97,10 +88,6 @@ export default function DashboardPage() {
         if (statsRes?.ok) {
           const statsData = await statsRes.json();
           setStats(statsData);
-        }
-        if (adRes?.ok) {
-          const adData = await adRes.json();
-          setAdStatus(adData);
         }
       } catch (e) {
         console.error("Failed to fetch dashboard data:", e);
@@ -345,48 +332,40 @@ export default function DashboardPage() {
 
         {/* Right Sidebar */}
         <div className="space-y-6">
-          {/* Active Directory Status */}
+          {/* Sanitization Assurance Platform */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Network className="h-5 w-5 text-primary" />
-                Active Directory
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Sanitization Assurance
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {adStatus ? (
-                <>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2.5 h-2.5 rounded-full ${adStatus.connected ? 'bg-emerald-500 status-online' : 'bg-red-500'}`} />
-                    <span className="text-sm font-medium">
-                      {adStatus.connected ? "Connected" : "Disconnected"}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Domain</span>
-                      <span className="font-mono text-xs">{adStatus.domain}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">DC</span>
-                      <span className="font-mono text-xs truncate ml-2">{adStatus.domainController}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Last Sync</span>
-                      <span className="text-xs">{adStatus.lastSync}</span>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full" asChild>
-                    <Link href="/worker/history">
-                      <MonitorDot className="mr-2 h-3 w-3" />
-                      View AD Computers
-                    </Link>
-                  </Button>
-                </>
-              ) : (
-                <p className="text-muted-foreground text-sm">AD service unavailable.</p>
-              )}
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 status-online" />
+                <span className="text-sm font-medium">Engine Active & Ready</span>
+              </div>
+              <Separator />
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Framework</span>
+                  <span className="font-mono text-xs font-semibold">Adaptive ASF</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Standards</span>
+                  <span className="text-xs">DoD 5220 / NIST 800-88</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Verification</span>
+                  <span className="text-xs">Forensic Recovery Scan</span>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link href="/worker/wipe">
+                  <Shield className="mr-2 h-3 w-3" />
+                  Launch Wiper
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 

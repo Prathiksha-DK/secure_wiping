@@ -105,23 +105,15 @@ const mockUsers: ConnectedUser[] = [
 export default function ConnectedUsers() {
   const [users, setUsers] = useState<ConnectedUser[]>([]);
   const [status, setStatus] = useState<FetchState>('loading');
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
   const fetchConnectedUsers = () => {
-    setStatus('loading');
-    // Simulate network delay
-    setTimeout(() => {
-        setUsers(mockUsers);
-        setStatus('success');
-        setLastUpdated(new Date());
-    }, 500);
+    setUsers(mockUsers);
+    setStatus('success');
+    setLastUpdated(new Date());
   };
 
   useEffect(() => {
     fetchConnectedUsers();
-    // Keep refresh functionality, but it will just re-set the mock data
-    const interval = setInterval(fetchConnectedUsers, 30000); 
-
+    const interval = setInterval(fetchConnectedUsers, 30000);
     return () => clearInterval(interval);
   }, []);
 

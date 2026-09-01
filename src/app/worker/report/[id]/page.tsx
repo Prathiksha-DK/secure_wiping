@@ -139,32 +139,7 @@ export default async function ReportPage({ params }: { params: { id: string } })
 
                     <Separator />
 
-                    {/* Active Directory Information */}
-                    {(report.adComputer || report.adOU) && (
-                        <>
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-base flex items-center gap-2">
-                                    <Network className="h-4 w-4 text-primary" />
-                                    Active Directory Context
-                                </h3>
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    {report.adComputer && (
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">AD Computer</span>
-                                            <span className="font-mono text-xs">{report.adComputer}</span>
-                                        </div>
-                                    )}
-                                    {report.adOU && (
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-muted-foreground">OU</span>
-                                            <span className="font-mono text-xs truncate ml-2">{report.adOU}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <Separator />
-                        </>
-                    )}
+
 
                     {/* Verification */}
                     <div className="space-y-4">

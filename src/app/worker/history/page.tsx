@@ -115,7 +115,7 @@ export default function HistoryPage() {
                   <TableHead>Certificate ID</TableHead>
                   <TableHead>Device</TableHead>
                   <TableHead>Standard</TableHead>
-                  <TableHead>AD Computer</TableHead>
+                  <TableHead>Operator</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -155,14 +155,7 @@ export default function HistoryPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {item.adComputer ? (
-                          <div className="flex items-center gap-1">
-                            <Network className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs font-mono">{item.adComputer}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        <span className="text-xs">{item.operatorName || "Worker"}</span>
                       </TableCell>
                       <TableCell>
                         <Badge

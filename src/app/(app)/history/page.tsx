@@ -1,9 +1,8 @@
-
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
-import { MoreHorizontal, FileDown, Search, Download } from "lucide-react";
+import { MoreHorizontal, FileDown, Search, Download, ShieldCheck, ShieldAlert, ShieldX, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,13 +30,16 @@ import {
 import { Input } from "@/components/ui/input";
 
 type HistoryItem = {
-    shortId: string;
-    deviceName: string;
-    wipeStatus: "Completed" | "Failed" | "In Progress";
-    createdAt: string;
-    filesVerified: number;
-    receiverEmail: string;
-    emailSent: boolean;
+  shortId: string;
+  deviceName: string;
+  deviceSerial: string;
+  wipeStatus: string;
+  finalState?: string;
+  standard: string;
+  createdAt: string;
+  filesVerified: number;
+  operatorName: string;
+  notes: string;
 };
 
 export default function HistoryPage() {
@@ -49,24 +51,31 @@ export default function HistoryPage() {
     async function fetchHistory() {
       setLoading(true);
       try {
-        const res = await fetch('http://localhost:9758/api/history', { cache: 'no-store' });
+        const res = await fetch("http://localhost:9758/api/history", { cache: "no-store" });
         if (!res.ok) {
-            throw new Error("Failed to fetch history from server.");
+          throw new Error("Failed to fetch history from server.");
         }
         const data = await res.json();
         const mappedData = data.map((item: any) => ({
-            shortId: item.id,
-            deviceName: item.device,
-            wipeStatus: item.status,
-            createdAt: item.endTime || item.startTime || (item.created_at ? new Date(item.created_at * 1000).toISOString() : new Date().toISOString()),
-            filesVerified: item.filesVerified || 0,
-            receiverEmail: item.notes || "system@securewipe.local",
-            emailSent: item.status === "Completed"
+          shortId: item.id,
+          deviceName: item.device,
+          deviceSerial: item.deviceSerial || "",
+          wipeStatus: item.status,
+          finalState: item.finalState || (
+            item.status === "Completed" ? "SANITIZED_AND_REUSABLE" :
+            item.status === "Warning" ? "SANITIZATION_NOT_VERIFIABLE" :
+            item.status === "Failed" ? "NON_SANITIZABLE" : ""
+          ),
+          standard: item.standard || item.method || "Adaptive Sanitization",
+          createdAt: item.endTime || item.startTime || (item.created_at ? new Date(item.created_at * 1000).toISOString() : new Date().toISOString()),
+          filesVerified: item.filesVerified || 0,
+          operatorName: item.operatorName || "Worker",
+          notes: item.notes || "",
         }));
         setHistoryData(mappedData);
       } catch (error) {
         console.error("Failed to fetch history data:", error);
-        setHistoryData([]); // Clear data on error
+        setHistoryData([]);
       } finally {
         setLoading(false);
       }
@@ -80,14 +89,44 @@ export default function HistoryPage() {
     )
   );
 
+  const renderStatusBadge = (item: HistoryItem) => {
+    const fs = item.finalState || "";
+    if (fs === "SANITIZED_AND_REUSABLE" || item.wipeStatus === "Completed") {
+      return (
+        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300">
+          🟢 Reusable
+        </Badge>
+      );
+    }
+    if (fs === "SANITIZATION_NOT_VERIFIABLE" || item.wipeStatus === "Warning") {
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-300">
+          🟡 Not Verifiable
+        </Badge>
+      );
+    }
+    if (fs === "NON_SANITIZABLE" || item.wipeStatus === "Failed") {
+      return (
+        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border-red-300">
+          🔴 Disposal Required
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <Clock className="h-3 w-3 mr-1" /> {item.wipeStatus}
+      </Badge>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Wipe History</CardTitle>
+            <CardTitle>Sanitization Audit History</CardTitle>
             <CardDescription>
-              A log of all data wiping operations recorded by the server.
+              Government-compliant audit log of all adaptive sanitization and recovery verification operations.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -95,7 +134,7 @@ export default function HistoryPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search history..."
+                placeholder="Search sessions or targets..."
                 className="pl-8 sm:w-[300px]"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -108,55 +147,46 @@ export default function HistoryPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Cert. No.</TableHead>
-              <TableHead>Device</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Email Sent</TableHead>
-              <TableHead>Date</TableHead>
+              <TableHead>Session / Cert ID</TableHead>
+              <TableHead>Target</TableHead>
+              <TableHead>Method</TableHead>
+              <TableHead>Assurance State</TableHead>
+              <TableHead>Operator</TableHead>
+              <TableHead>Date & Time</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">Loading report history...</TableCell>
+                <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                  Loading sanitization audit history...
+                </TableCell>
               </TableRow>
             ) : filteredHistory.length === 0 ? (
-                 <TableRow>
-                    <TableCell colSpan={6} className="text-center">No reports found.</TableCell>
-                 </TableRow>
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                  No sanitization records found.
+                </TableCell>
+              </TableRow>
             ) : (
               filteredHistory.map((item) => (
                 <TableRow key={item.shortId}>
-                  <TableCell className="font-mono">{item.shortId}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold">{item.shortId}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{item.deviceName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.receiverEmail}
-                    </div>
+                    <div className="font-medium text-sm truncate max-w-[200px]">{item.deviceName}</div>
+                    {item.deviceSerial && (
+                      <div className="text-[11px] text-muted-foreground font-mono">
+                        SN: {item.deviceSerial}
+                      </div>
+                    )}
                   </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        item.wipeStatus === "Completed"
-                          ? "default"
-                          : "destructive"
-                      }
-                      className={
-                        item.wipeStatus === "Completed"
-                          ? "bg-green-600 hover:bg-green-700 text-white"
-                          : ""
-                      }
-                    >
-                      {item.wipeStatus}
-                    </Badge>
+                  <TableCell className="text-xs text-muted-foreground">{item.standard}</TableCell>
+                  <TableCell>{renderStatusBadge(item)}</TableCell>
+                  <TableCell className="text-xs">{item.operatorName}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {new Date(item.createdAt).toLocaleString()}
                   </TableCell>
-                  <TableCell>
-                     <Badge variant={item.emailSent ? "secondary" : "outline"}>
-                        {item.emailSent ? "Yes" : "No"}
-                     </Badge>
-                  </TableCell>
-                  <TableCell>{new Date(item.createdAt).toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -171,9 +201,9 @@ export default function HistoryPage() {
                           <Link href={`/report/${item.shortId}`}>View Certificate</Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
-                            <a href={`http://localhost:9758/api/reports/${item.shortId}`} target="_blank" rel="noopener noreferrer">
-                                <Download className="mr-2 h-4 w-4"/> View Report Data
-                            </a>
+                          <a href={`http://localhost:9758/api/reports/${item.shortId}`} target="_blank" rel="noopener noreferrer">
+                            <Download className="mr-2 h-4 w-4" /> Export Audit JSON
+                          </a>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

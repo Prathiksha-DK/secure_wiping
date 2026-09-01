@@ -7,7 +7,7 @@ import {z} from 'zod';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
 
-const API_BASE = 'http://localhost:9758';
+const API_BASE = process.env.API_BASE || 'http://127.0.0.1:9758';
 
 export async function suggestWipeMethodAction(prevState: any, formData: FormData) {
   const schema = z.object({

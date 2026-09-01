@@ -16,6 +16,7 @@ import {
   Bomb,
   FileLock,
   Network,
+  Eye,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -27,6 +28,7 @@ import { cn } from '@/lib/utils';
 
 const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
   { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
@@ -37,6 +39,7 @@ const workerNavItems = [
 
 const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
   { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
