@@ -15,11 +15,16 @@ from secure_backup import encrypt_backup_and_wipe, decrypt_and_restore
 from secure_encrypt_wipe import encrypt_and_wipe, _pick_disk_by_name_or_size
 from user_storage import init_db, insert_user, get_user_by_username
 
+from remote_wipe_api import remote_wipe_bp
+
 # -----------------------------------------------------------
 # Single consolidated Flask application
 # -----------------------------------------------------------
 app = Flask("securewipe_api")
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+app.register_blueprint(remote_wipe_bp)
+
 
 # -----------------------------------------------------------
 # Database helpers for wipe history & reports

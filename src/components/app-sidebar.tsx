@@ -35,6 +35,7 @@ const workerNavItems = [
   { href: '/worker/history', icon: History, label: 'History & Audit' },
   { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
   { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
+  { href: '/remote-wipe', icon: Network, label: 'Virtual / Remote Wipe' },
 ];
 
 const masterNavItems = [
@@ -45,6 +46,7 @@ const masterNavItems = [
   { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/history', icon: History, label: 'History & Audit' },
   { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
+  { href: '/remote-wipe', icon: Network, label: 'Virtual / Remote Wipe' },
 ];
 
 function getRoleFromCookie() {
