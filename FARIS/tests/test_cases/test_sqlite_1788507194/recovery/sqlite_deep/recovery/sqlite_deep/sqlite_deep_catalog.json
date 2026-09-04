@@ -1,0 +1,93 @@
+{
+  "total_pages_carved": 2,
+  "total_active_records": 4,
+  "total_deleted_records": 1,
+  "database_reconstructed": true,
+  "database_file": "D:\\wiping\\FARIS\\tests\\test_cases\\test_sqlite_1788507194\\recovery\\sqlite_deep\\recovery\\sqlite_deep\\test_sqlite_1788507194_recovered_sqlite.db",
+  "pages": [
+    {
+      "page_index": 1,
+      "global_offset": 0,
+      "page_type": "Leaf Table B-Tree",
+      "active_count": 1,
+      "deleted_count": 0
+    },
+    {
+      "page_index": 2,
+      "global_offset": 4096,
+      "page_type": "Leaf Table B-Tree",
+      "active_count": 3,
+      "deleted_count": 1
+    }
+  ],
+  "active_records": [
+    {
+      "row_id": 1,
+      "fields": [
+        "table",
+        "users",
+        "users",
+        2,
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, role TEXT)"
+      ],
+      "source_offset": 3994,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 1,
+      "fields": [
+        null,
+        "Alice Admin",
+        "alice@secure.gov",
+        "ADMINISTRATOR"
+      ],
+      "source_offset": 8145,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 2,
+      "fields": [
+        null,
+        "Bob Investigator",
+        "bob@forensics.org",
+        "EXAMINER"
+      ],
+      "source_offset": 8097,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 4,
+      "fields": [
+        null,
+        "Dave Informant",
+        "dave@intel.gov",
+        "SOURCE"
+      ],
+      "source_offset": 8009,
+      "status": "ACTIVE"
+    }
+  ],
+  "deleted_records": [
+    {
+      "row_id": null,
+      "fields": [
+        "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "source_offset": 4110,
+      "status": "DELETED_CARVED"
+    }
+  ]
+}

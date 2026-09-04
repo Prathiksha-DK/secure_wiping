@@ -1,0 +1,58 @@
+{
+  "case_id": "test_dyn_part",
+  "image": "tests/fixtures/pendrive_image.E01",
+  "partition_count": 3,
+  "partitions": [
+    {
+      "slot": "000:  Meta",
+      "start_sector": 0,
+      "end_sector": 0,
+      "length_sectors": 1,
+      "size_bytes": 512,
+      "description": "Primary Table (#0)",
+      "is_allocated": false
+    },
+    {
+      "slot": "001:  -------",
+      "start_sector": 0,
+      "end_sector": 2047,
+      "length_sectors": 2048,
+      "size_bytes": 1048576,
+      "description": "Unallocated",
+      "is_allocated": false
+    },
+    {
+      "slot": "002:  000:000",
+      "start_sector": 2048,
+      "end_sector": 15435775,
+      "length_sectors": 15433728,
+      "size_bytes": 7902068736,
+      "description": "Win95 FAT32 (0x0c)",
+      "is_allocated": true
+    }
+  ],
+  "filesystems": [
+    {
+      "partition_offset": 2048,
+      "raw_output": "FILE SYSTEM INFORMATION\n--------------------------------------------\nFile System Type: FAT32\n\nOEM Name: MSDOS5.0\nVolume ID: 0x72361354\nVolume Label (Boot Sector): NO NAME    \nVolume Label (Root Directory): USB        \nFile System Type Label: FAT32   \nNext Free Sector (FS Info): 32800\nFree Sector Count (FS Info): 15400928\n\nSectors before file system: 2048\n\nFile System Layout (in sectors)\nTotal Range: 0 - 15433727\n* Reserved: 0 - 2685\n** Boot Sector: 0\n** FS Info Sector: 1\n** Backup Boot Sector: 6\n* FAT 0: 2686 - 17726\n* FAT 1: 17727 - 32767\n* Data Area: 32768 - 15433727\n** Cluster Area: 32768 - 15433727\n*** Root Directory: 32768 - 32775\n\nMETADATA INFORMATION\n--------------------------------------------\nRange: 2 - 246415366\nRoot Directory: 2\n\nCONTENT INFORMATION\n--------------------------------------------\nSector Size: 512\nCluster Size: 4096\nTotal Cluster Range: 2 - 1925121\n\nFAT CONTENTS (in sectors)\n--------------------------------------------\n32768-32775 (8) -> EOF\n32776-32783 (8) -> EOF\n32784-32791 (8) -> EOF\n32792-32799 (8) -> EOF\n",
+      "filesystem_type": "FAT32",
+      "volume_name": "MSDOS5.0",
+      "sector_size": 512,
+      "cluster_size": 4096,
+      "total_clusters": 1925120,
+      "free_clusters": 0,
+      "data_area_offset": 32768,
+      "fat_tables": 2
+    }
+  ],
+  "primary_partition_offset": 2048,
+  "all_partition_offsets": [
+    2048
+  ],
+  "memory_analysis": {
+    "is_memory": false,
+    "status": "N/A",
+    "evidence_type": "Disk Image",
+    "notes": "N/A \u2014 evidence is a disk image, not memory evidence. Memory recovery bypassed."
+  }
+}

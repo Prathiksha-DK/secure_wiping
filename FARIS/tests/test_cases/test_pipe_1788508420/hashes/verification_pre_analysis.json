@@ -1,0 +1,21 @@
+{
+  "case_id": "test_pipe_1788508420",
+  "stage": "PRE_ANALYSIS",
+  "timestamp": "2026-09-04T07:53:40.241088+00:00",
+  "evidence_count": 1,
+  "results": [
+    {
+      "timestamp": "2026-09-04T07:53:40.241088+00:00",
+      "target": "pipeline_test.raw",
+      "image_format": "E01 (Expert Witness)",
+      "stored_md5": "",
+      "stored_sha256": "",
+      "media_size": "Unknown",
+      "read_only_protection": false,
+      "verification_status": "VERIFIED_MATCH",
+      "full_stream_verified": true,
+      "notes": "E01 internal checksums verified intact via ewfinfo/libewf.",
+      "stage": "PRE_ANALYSIS"
+    }
+  ]
+}

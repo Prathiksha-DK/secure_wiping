@@ -1,0 +1,11 @@
+{
+  "case_id": "test_pipe_1788498899",
+  "total_artifacts_evaluated": 0,
+  "summary_counts": {
+    "VALID": 0,
+    "PARTIALLY_VALID": 0,
+    "REJECTED": 0,
+    "UNVERIFIED_GENERIC": 0
+  },
+  "artifacts": []
+}

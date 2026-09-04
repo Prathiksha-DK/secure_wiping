@@ -1,0 +1,30 @@
+# Dependencies / build output
+node_modules/
+.next/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Forensic case data / evidence
+cases/
+archive/
+case001/
+exported_evidence/
+runtime/
+
+# Generated test data
+tests/**/cases/
+tests/**/output/
+tests/**/results/
+
+# Temporary / generated files
+*.E01
+*.E02
+*.E03
+*.E04
+*.E05
+*.E06
+*.dd
+*.raw
+*.img

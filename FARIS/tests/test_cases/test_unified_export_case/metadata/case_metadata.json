@@ -1,0 +1,19 @@
+{
+  "case_id": "test_unified_export_case",
+  "case_name": "Physical Storage Device Acquisition",
+  "created_at": "2026-09-04T07:54:36.856143+00:00",
+  "operator": "Automated Tester",
+  "evidence": [
+    {
+      "evidence_id": "EVID_test_evidence",
+      "evidence_type": "Disk Image",
+      "path": "tests/test_cases/test_unified_export_case/evidence/test_evidence.raw",
+      "exists": true,
+      "size_bytes": 1048576
+    }
+  ],
+  "analysis_history": [],
+  "recovery_history": [],
+  "validation_history": [],
+  "report_history": []
+}

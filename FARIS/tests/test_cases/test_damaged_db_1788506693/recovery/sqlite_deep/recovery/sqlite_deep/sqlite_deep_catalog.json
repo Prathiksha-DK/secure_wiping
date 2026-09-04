@@ -1,0 +1,235 @@
+{
+  "total_pages_carved": 1,
+  "total_active_records": 24,
+  "total_deleted_records": 0,
+  "database_reconstructed": true,
+  "database_file": "D:\\wiping\\FARIS\\tests\\test_cases\\test_damaged_db_1788506693\\recovery\\sqlite_deep\\recovery\\sqlite_deep\\test_damaged_db_1788506693_recovered_sqlite.db",
+  "pages": [
+    {
+      "page_index": 1,
+      "global_offset": 4096,
+      "page_type": "Leaf Table B-Tree",
+      "active_count": 24,
+      "deleted_count": 0
+    }
+  ],
+  "active_records": [
+    {
+      "row_id": 1,
+      "fields": [
+        null,
+        "Sensitive note payload number 1"
+      ],
+      "source_offset": 8156,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 2,
+      "fields": [
+        null,
+        "Sensitive note payload number 2"
+      ],
+      "source_offset": 8120,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 3,
+      "fields": [
+        null,
+        "Sensitive note payload number 3"
+      ],
+      "source_offset": 8084,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 4,
+      "fields": [
+        null,
+        "Sensitive note payload number 4"
+      ],
+      "source_offset": 8048,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 5,
+      "fields": [
+        null,
+        "Sensitive note payload number 5"
+      ],
+      "source_offset": 8012,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 6,
+      "fields": [
+        null,
+        "Sensitive note payload number 6"
+      ],
+      "source_offset": 7976,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 7,
+      "fields": [
+        null,
+        "Sensitive note payload number 7"
+      ],
+      "source_offset": 7940,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 8,
+      "fields": [
+        null,
+        "Sensitive note payload number 8"
+      ],
+      "source_offset": 7904,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 9,
+      "fields": [
+        null,
+        "Sensitive note payload number 9"
+      ],
+      "source_offset": 7868,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 10,
+      "fields": [
+        null,
+        "Sensitive note payload number 10"
+      ],
+      "source_offset": 7831,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 11,
+      "fields": [
+        null,
+        "Sensitive note payload number 11"
+      ],
+      "source_offset": 7794,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 12,
+      "fields": [
+        null,
+        "Sensitive note payload number 12"
+      ],
+      "source_offset": 7757,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 13,
+      "fields": [
+        null,
+        "Sensitive note payload number 13"
+      ],
+      "source_offset": 7720,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 14,
+      "fields": [
+        null,
+        "Sensitive note payload number 14"
+      ],
+      "source_offset": 7683,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 15,
+      "fields": [
+        null,
+        "Sensitive note payload number 15"
+      ],
+      "source_offset": 7646,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 16,
+      "fields": [
+        null,
+        "Sensitive note payload number 16"
+      ],
+      "source_offset": 7609,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 17,
+      "fields": [
+        null,
+        "Sensitive note payload number 17"
+      ],
+      "source_offset": 7572,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 18,
+      "fields": [
+        null,
+        "Sensitive note payload number 18"
+      ],
+      "source_offset": 7535,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 19,
+      "fields": [
+        null,
+        "Sensitive note payload number 19"
+      ],
+      "source_offset": 7498,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 20,
+      "fields": [
+        null,
+        "Sensitive note payload number 20"
+      ],
+      "source_offset": 7461,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 21,
+      "fields": [
+        null,
+        "Sensitive note payload number 21"
+      ],
+      "source_offset": 7424,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 22,
+      "fields": [
+        null,
+        "Sensitive note payload number 22"
+      ],
+      "source_offset": 7387,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 23,
+      "fields": [
+        null,
+        "Sensitive note payload number 23"
+      ],
+      "source_offset": 7350,
+      "status": "ACTIVE"
+    },
+    {
+      "row_id": 24,
+      "fields": [
+        null,
+        "Sensitive note payload number 24"
+      ],
+      "source_offset": 7313,
+      "status": "ACTIVE"
+    }
+  ],
+  "deleted_records": []
+}

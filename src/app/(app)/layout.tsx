@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import AppSidebar from '@/components/app-sidebar';
 import AppHeader from '@/components/app-header';
+import NavigationLockModal from '@/components/navigation-lock-modal';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      <NavigationLockModal />
     </div>
   );
 }

@@ -1,0 +1,30 @@
+{
+  "case_id": "test_pipe_1788507276",
+  "total_artifacts_evaluated": 2,
+  "summary_counts": {
+    "VALID": 0,
+    "PARTIALLY_VALID": 0,
+    "REJECTED": 2,
+    "UNVERIFIED_GENERIC": 0
+  },
+  "artifacts": [
+    {
+      "file": "RESIDUAL_0001_5161.jpg",
+      "validation_status": "REJECTED_NULL_FILL",
+      "confidence": "LOW",
+      "reason": "False-recovery detection: >98% null bytes (sparse zero-fill).",
+      "size_bytes": 2070,
+      "sha256": "9b519a84d6303aa0f37d20484cef13247bd615531993556e6d4ae1dba067a261",
+      "relative_path": "tests/test_cases/test_pipe_1788507276/recovery/sanitization/residuals/RESIDUAL_0001_5161.jpg"
+    },
+    {
+      "file": "RESIDUAL_0002_1024.png",
+      "validation_status": "REJECTED_NULL_FILL",
+      "confidence": "LOW",
+      "reason": "False-recovery detection: >98% null bytes (sparse zero-fill).",
+      "size_bytes": 4137,
+      "sha256": "dfb551954379a60c722533740092e2570b433f43b5a7b11f445f3e377a528bae",
+      "relative_path": "tests/test_cases/test_pipe_1788507276/recovery/sanitization/residuals/RESIDUAL_0002_1024.png"
+    }
+  ]
+}

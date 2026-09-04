@@ -1,0 +1,30 @@
+{
+  "case_id": "test_pipe_1788506695",
+  "total_artifacts_evaluated": 2,
+  "summary_counts": {
+    "VALID": 2,
+    "PARTIALLY_VALID": 0,
+    "REJECTED": 0,
+    "UNVERIFIED_GENERIC": 0
+  },
+  "artifacts": [
+    {
+      "file": "RECON_RESIDUAL_0001_2048.png",
+      "validation_status": "VALID",
+      "confidence": "HIGH",
+      "reason": "PNG magic header and IEND chunk verified.",
+      "size_bytes": 45,
+      "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+      "relative_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/reconstructed/RECON_RESIDUAL_0001_2048.png"
+    },
+    {
+      "file": "RESIDUAL_0001_2048.png",
+      "validation_status": "VALID",
+      "confidence": "HIGH",
+      "reason": "PNG magic header and IEND chunk verified.",
+      "size_bytes": 45,
+      "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+      "relative_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/residuals/RESIDUAL_0001_2048.png"
+    }
+  ]
+}

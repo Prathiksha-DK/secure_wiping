@@ -1,0 +1,131 @@
+{
+  "faris_version": "1.0.0",
+  "report_generated_at": "2026-09-04T05:22:48.302505+00:00",
+  "case_id": "test_pipe_1788499367",
+  "case_metadata": {
+    "case_id": "test_pipe_1788499367",
+    "case_name": "Integration Test Raw Image",
+    "created_at": "2026-09-04T05:22:47.669069+00:00",
+    "operator": "Automated Tester",
+    "evidence": [
+      {
+        "evidence_id": "EVID_test_svc_evidence",
+        "evidence_type": "Disk Image",
+        "path": "test_svc_evidence.raw",
+        "exists": true,
+        "size_bytes": 1048576
+      }
+    ],
+    "analysis_history": [],
+    "recovery_history": [],
+    "validation_history": [],
+    "report_history": []
+  },
+  "engine_inventory": {
+    "libewf": {
+      "installed": true,
+      "version": "ewfinfo 20230405",
+      "tools": {
+        "ewfacquire": true,
+        "ewfverify": true,
+        "ewfinfo": true,
+        "ewfexport": true
+      },
+      "license": "LGPL-3.0 (Official Joachim Metz / libyal)",
+      "status": "AVAILABLE"
+    },
+    "sleuthkit": {
+      "installed": true,
+      "version": "The Sleuth Kit ver 4.15.0",
+      "tools": {
+        "mmls": true,
+        "fsstat": true,
+        "fls": true,
+        "istat": true,
+        "icat": true,
+        "ifind": true,
+        "ils": true,
+        "tsk_recover": true,
+        "blkls": true,
+        "img_cat": true
+      },
+      "license": "CPL-1.0 / GPL-2.0 (Official Brian Carrier)",
+      "status": "AVAILABLE"
+    },
+    "sqlite_runtime": {
+      "installed": true,
+      "version": "SQLite 3.45.3 (Python embedded) + SQLite 3 CLI Tools Bundled",
+      "tools": {
+        "sqlite3_api": true,
+        "sqlite3_cli": true
+      },
+      "license": "Public Domain (Official SQLite.org)",
+      "status": "AVAILABLE"
+    },
+    "photorec": {
+      "installed": true,
+      "version": "TestDisk & PhotoRec 7.2 (CGSecurity Win64 Bundled)",
+      "tools": {
+        "photorec_win": true,
+        "fidentify_win": true,
+        "testdisk_win": true
+      },
+      "license": "GPL-2.0+ (Official CGSecurity)",
+      "status": "AVAILABLE"
+    },
+    "volatility": {
+      "installed": true,
+      "version": "Volatility 3 v2.5.0 (Volatility Foundation Bundled)",
+      "tools": {
+        "vol.py": true
+      },
+      "license": "VSL-1.0 (Official Volatility Foundation)",
+      "status": "AVAILABLE"
+    },
+    "python_runtime": {
+      "installed": true,
+      "version": "Python 3.12 (FARIS Portable Runtime)",
+      "path": "D:\\wiping\\FARIS\\runtime\\python\\python.exe",
+      "license": "PSF License",
+      "status": "AVAILABLE"
+    }
+  },
+  "audit_chain_verification": {
+    "case_id": "test_pipe_1788499367",
+    "audit_chain_intact": true,
+    "records_verified": 9,
+    "broken_at_index": null,
+    "status": "INTEGRITY_VERIFIED",
+    "last_chain_hash": "5f6a69583553912d24b908d67bc82e861058c70ed77a38f629000e2c4d3226e0"
+  },
+  "image_analysis": {
+    "case_id": "test_pipe_1788499367",
+    "image": "test_svc_evidence.raw",
+    "partition_count": 0,
+    "partitions": [],
+    "filesystems": [],
+    "primary_partition_offset": 0,
+    "all_partition_offsets": [
+      0
+    ],
+    "memory_analysis": {
+      "is_memory": true,
+      "status": "MEMORY_EVIDENCE_DETECTED",
+      "evidence_type": "Physical / Virtual Memory",
+      "notes": "Evidence requires Volatility / memory inspection pipeline."
+    }
+  },
+  "artifact_discovery": {
+    "total_discovered": 0,
+    "active_count": 0,
+    "deleted_count": 0
+  },
+  "artifact_states": {},
+  "validated_artifacts": [],
+  "validation_summary": {
+    "VALID": 0,
+    "PARTIALLY_VALID": 0,
+    "REJECTED": 0,
+    "UNVERIFIED_GENERIC": 0
+  }
+}

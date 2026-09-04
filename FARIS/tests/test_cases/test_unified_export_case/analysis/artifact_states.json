@@ -1,0 +1,8 @@
+{
+  "case_id": "test_unified_export_case",
+  "source_image": "tests/test_cases/test_unified_export_case/evidence/test_evidence.raw",
+  "partition_offset": 0,
+  "total_analyzed": 0,
+  "state_counts": {},
+  "states": []
+}

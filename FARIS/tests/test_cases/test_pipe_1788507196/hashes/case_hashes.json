@@ -1,0 +1,10 @@
+{
+  "case_id": "test_pipe_1788507196",
+  "timestamp": "2026-09-04T07:33:17.333938+00:00",
+  "evidence_hashes": {},
+  "recovered_hashes": {
+    "tests/test_cases/test_pipe_1788507196/recovery/sanitization/reconstructed/RECON_RESIDUAL_0001_2048.png": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+    "tests/test_cases/test_pipe_1788507196/recovery/sanitization/residuals/RESIDUAL_0001_2048.png": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f"
+  },
+  "reports_hashes": {}
+}

@@ -18,6 +18,7 @@ import {
   Bomb,
   FileLock,
   Network,
+  Eye,
 } from 'lucide-react';
 import {
   Sheet,
@@ -46,9 +47,12 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import React from 'react';
 import { logout } from '@/app/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
 
 const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
   { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
@@ -59,6 +63,8 @@ const workerNavItems = [
 
 const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
   { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
@@ -77,11 +83,32 @@ export default function AppHeader() {
   const pathSegments = pathname.split('/').filter(Boolean);
   const [role, setRole] = React.useState('worker');
   const [mounted, setMounted] = React.useState(false);
+  const [isLocked, setIsLocked] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
     setRole(getRoleFromCookie());
+    setIsLocked(isFarisLocked());
+
+    const handleLockChange = (e: any) => {
+      setIsLocked(Boolean(e.detail?.locked ?? isFarisLocked()));
+    };
+
+    window.addEventListener('faris-lock-change', handleLockChange);
+    return () => {
+      window.removeEventListener('faris-lock-change', handleLockChange);
+    };
   }, [pathname]);
+
+  const handleNavClick = (e: React.MouseEvent, targetHref: string) => {
+    if (isFarisLocked()) {
+      if (targetHref !== '/faris' && !targetHref.startsWith('/faris/')) {
+        e.preventDefault();
+        e.stopPropagation();
+        showNavigationLockedAlert();
+      }
+    }
+  };
 
   if (!mounted) {
     return (
@@ -107,6 +134,7 @@ export default function AppHeader() {
             <nav className="grid gap-6 text-lg font-medium">
               <Link
                 href={`${base_path}/dashboard`}
+                onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
                 className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
               >
                 <ShieldCheck className="h-5 w-5 transition-all group-hover:scale-110" />
@@ -116,6 +144,7 @@ export default function AppHeader() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => handleNavClick(e, item.href)}
                   className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
                 >
                   <item.icon className="h-5 w-5" />
@@ -124,6 +153,7 @@ export default function AppHeader() {
               ))}
                <Link
                   href="#"
+                  onClick={(e) => handleNavClick(e, '#')}
                   className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
                 >
                   <Settings className="h-5 w-5" />
@@ -136,7 +166,7 @@ export default function AppHeader() {
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href={`${base_path}/dashboard`}>Dashboard</Link>
+                <Link href={`${base_path}/dashboard`} onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}>Dashboard</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             {pathSegments.slice(1).map((segment, index) => (

@@ -1,0 +1,414 @@
+{
+  "faris_version": "1.0.0",
+  "report_generated_at": "2026-09-04T07:24:56.817065+00:00",
+  "case_id": "test_pipe_1788506695",
+  "case_metadata": {
+    "case_id": "test_pipe_1788506695",
+    "case_name": "Full Pipeline Test",
+    "created_at": "2026-09-04T07:24:55.647247+00:00",
+    "operator": "Automated Quality Engineer",
+    "evidence": [
+      {
+        "evidence_id": "EVID_pipeline_test",
+        "evidence_type": "Disk Image",
+        "path": "pipeline_test.raw",
+        "exists": true,
+        "size_bytes": 6189
+      }
+    ],
+    "analysis_history": [],
+    "recovery_history": [],
+    "validation_history": [],
+    "report_history": []
+  },
+  "engine_inventory": {
+    "libewf": {
+      "installed": true,
+      "version": "ewfinfo 20230405",
+      "tools": {
+        "ewfacquire": true,
+        "ewfverify": true,
+        "ewfinfo": true,
+        "ewfexport": true
+      },
+      "license": "LGPL-3.0 (Official Joachim Metz / libyal)",
+      "status": "AVAILABLE"
+    },
+    "sleuthkit": {
+      "installed": true,
+      "version": "The Sleuth Kit ver 4.15.0",
+      "tools": {
+        "mmls": true,
+        "fsstat": true,
+        "fls": true,
+        "istat": true,
+        "icat": true,
+        "ifind": true,
+        "ils": true,
+        "tsk_recover": true,
+        "blkls": true,
+        "img_cat": true
+      },
+      "license": "CPL-1.0 / GPL-2.0 (Official Brian Carrier)",
+      "status": "AVAILABLE"
+    },
+    "sqlite_runtime": {
+      "installed": true,
+      "version": "SQLite 3.45.3 (Python embedded) + SQLite 3 CLI Tools Bundled",
+      "tools": {
+        "sqlite3_api": true,
+        "sqlite3_cli": true
+      },
+      "license": "Public Domain (Official SQLite.org)",
+      "status": "AVAILABLE"
+    },
+    "photorec": {
+      "installed": true,
+      "version": "TestDisk & PhotoRec 7.2 (CGSecurity Win64 Bundled)",
+      "tools": {
+        "photorec_win": true,
+        "fidentify_win": true,
+        "testdisk_win": true
+      },
+      "license": "GPL-2.0+ (Official CGSecurity)",
+      "status": "AVAILABLE"
+    },
+    "volatility": {
+      "installed": true,
+      "version": "Volatility 3 v2.5.0 (Volatility Foundation Bundled)",
+      "tools": {
+        "vol.py": true
+      },
+      "license": "VSL-1.0 (Official Volatility Foundation)",
+      "status": "AVAILABLE"
+    },
+    "python_runtime": {
+      "installed": true,
+      "version": "Python 3.12 (FARIS Portable Runtime)",
+      "path": "D:\\wiping\\FARIS\\runtime\\python\\python.exe",
+      "license": "PSF License",
+      "status": "AVAILABLE"
+    }
+  },
+  "audit_chain_verification": {
+    "case_id": "test_pipe_1788506695",
+    "audit_chain_intact": true,
+    "records_verified": 19,
+    "broken_at_index": null,
+    "status": "INTEGRITY_VERIFIED",
+    "last_chain_hash": "d0f6a54273edb128f55d5b1ec866ca981af1e5344403130b8a1e39335e1beb3c"
+  },
+  "image_analysis": {
+    "case_id": "test_pipe_1788506695",
+    "image": "pipeline_test.raw",
+    "partition_count": 0,
+    "partitions": [],
+    "filesystems": [],
+    "primary_partition_offset": 0,
+    "all_partition_offsets": [
+      0
+    ],
+    "memory_analysis": {
+      "is_memory": true,
+      "status": "MEMORY_EVIDENCE_DETECTED",
+      "evidence_type": "Physical / Virtual Memory",
+      "notes": "Evidence requires Volatility / memory inspection pipeline."
+    }
+  },
+  "artifact_discovery": {
+    "total_discovered": 0,
+    "active_count": 0,
+    "deleted_count": 0
+  },
+  "artifact_states": {},
+  "sanitization_recovery": {
+    "case_id": "test_pipe_1788506695",
+    "evidence_image": "pipeline_test.raw",
+    "partition_offset": 0,
+    "stages": {
+      "stage_A_overwrite_analysis": {
+        "stage": "A_overwrite_pattern_analysis",
+        "status": "COMPLETED",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "PARTIAL_OVERWRITE_WITH_SURVIVING_REMNANTS",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.0,
+        "total_sectors_inspected": 13,
+        "bytes_inspected": 6189,
+        "distribution": {
+          "zero_fill_percent": 92.31,
+          "one_fill_percent": 0.0,
+          "repeated_pattern_percent": 0.0,
+          "random_entropy_percent": 0.0,
+          "residual_data_percent": 7.69
+        },
+        "pattern_frequencies": {},
+        "residual_extents_found": 1,
+        "residual_extents": [
+          {
+            "start_offset": 2048,
+            "length_bytes": 512
+          }
+        ],
+        "candidates_found": 1,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "Sanitization verified with 7.69% surviving residual data sectors",
+        "evidence_offsets": [
+          2048
+        ],
+        "confidence": "HIGH"
+      },
+      "stage_B_residual_analysis": {
+        "stage": "B_residual_remnant_analysis",
+        "status": "RESIDUAL_EVIDENCE_FOUND",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Residual Analysis",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.008,
+        "candidates_found": 1,
+        "validated_candidates": 1,
+        "recovered_targets": 1,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "output_dir": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/residuals",
+        "reason": "Identified 1 residual candidate fragments (1 structurally validated).",
+        "evidence_offsets": [
+          2048
+        ],
+        "confidence": "HIGH",
+        "candidates": [
+          {
+            "candidate_id": "RESIDUAL_0001",
+            "filename": "RESIDUAL_0001_2048.png",
+            "relative_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/residuals/RESIDUAL_0001_2048.png",
+            "offset": 2048,
+            "length_bytes": 45,
+            "content_type": "PNG Image",
+            "evidence_source": "Image offset 0x800",
+            "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+            "validation_status": "VALID",
+            "confidence": "HIGH",
+            "reason": "PNG magic header and IEND chunk verified."
+          }
+        ]
+      },
+      "stage_C_sector_block_recovery": {
+        "stage": "C_sector_block_recovery",
+        "status": "NO_RECOVERABLE_EVIDENCE",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Physical Sector & Block Level Recovery",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.002,
+        "total_sectors_analyzed": 12,
+        "partially_overwritten_sectors": 0,
+        "intact_blocks_identified": 0,
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "No surviving sector or block-level remnants identified (all inspected sectors uniformly sanitized).",
+        "evidence_offsets": [],
+        "confidence": "HIGH",
+        "recovered_blocks": []
+      },
+      "stage_D_slack_unallocated": {
+        "stage": "D_slack_unallocated_analysis",
+        "status": "NO_RECOVERABLE_EVIDENCE",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Filesystem Slack & Unallocated Space",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.04,
+        "files_evaluated_for_slack": 0,
+        "total_file_slack_bytes": 0,
+        "unallocated_bytes_scanned": 0,
+        "non_zero_unallocated_bytes": 0,
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "output_dir": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/slack",
+        "reason": "Unallocated clusters and slack spaces are completely sanitized / zero-filled.",
+        "evidence_offsets": [],
+        "confidence": "HIGH",
+        "slack_records": [],
+        "unallocated_candidates": []
+      },
+      "stage_E_journal_log_analysis": {
+        "stage": "E_journal_log_analysis",
+        "status": "NOT_APPLICABLE",
+        "device_type": "Storage Device Image",
+        "filesystem": "UNKNOWN",
+        "sanitization_type": "UNKNOWN Journal & Transaction Log Analysis",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.042,
+        "journal_supported": false,
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "N/A \u2014 No supported journaling filesystem identified on evidence partition.",
+        "evidence_offsets": [],
+        "confidence": "HIGH",
+        "journal_entries": []
+      },
+      "stage_F_hidden_areas": {
+        "stage": "F_hidden_unmapped_analysis",
+        "status": "NOT_APPLICABLE",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Partition Gap & Hidden Area Analysis",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.151,
+        "is_partitioned": false,
+        "unmapped_regions_found": 0,
+        "unmapped_regions": [],
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "N/A \u2014 Evidence image is a single volume / unpartitioned raw filesystem.",
+        "evidence_offsets": [],
+        "confidence": "HIGH"
+      },
+      "stage_G_ssd_nand_ftl": {
+        "stage": "G_ssd_nand_ftl_analysis",
+        "status": "NOT_ACCESSIBLE",
+        "device_type": "Unknown Storage Media",
+        "sanitization_type": "Unknown Storage Media NAND/FTL Architecture Evaluation",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.0,
+        "media_technology": "Unknown Storage Media",
+        "hardware_controller_access": "SHIELDED_BY_FIRMWARE",
+        "ftl_tables_accessible": false,
+        "raw_nand_accessible": false,
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "Controller-level raw NAND flash chips and internal Flash Translation Layer (FTL) wear-leveling tables are inaccessible through standard bit-stream E01 image (Unknown Storage Media). Direct hardware chip-off extraction or specialized vendor diagnostic JTAG/UART protocol required for physical NAND examination.",
+        "evidence_offsets": [],
+        "confidence": "HIGH"
+      },
+      "stage_H_multipass_analysis": {
+        "stage": "H_multipass_analysis",
+        "status": "COMPLETED",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Partial Sanitization / Incomplete Multi-Pass Overwrite",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.0,
+        "classification_verdict": "PARTIAL_OVERWRITE_DETECTED",
+        "matched_standard": "Partial Sanitization / Incomplete Multi-Pass Overwrite",
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "Sanitization verified on 92.3% of media, with 7.7% surviving residual data sectors.",
+        "evidence_offsets": [],
+        "confidence": "HIGH"
+      },
+      "stage_I_reconstruction": {
+        "stage": "I_previous_state_reconstruction",
+        "status": "COMPLETED",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Previous-State & Fragment Reconstruction",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.006,
+        "candidates_found": 1,
+        "validated_candidates": 1,
+        "recovered_targets": 1,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "output_dir": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/reconstructed",
+        "reason": "Successfully reconstructed 1 full files and 0 partial file structures from surviving remnants.",
+        "evidence_offsets": [],
+        "confidence": "HIGH",
+        "reconstructed_artifacts": [
+          {
+            "artifact_id": "RECON_001",
+            "name": "RECON_RESIDUAL_0001_2048.png",
+            "file_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/reconstructed/RECON_RESIDUAL_0001_2048.png",
+            "size_bytes": 45,
+            "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+            "classification": "FULLY_RECOVERED",
+            "confidence": "HIGH",
+            "notes": "Reconstructed from residual fragment RESIDUAL_0001_2048.png. PNG magic header and IEND chunk verified."
+          }
+        ]
+      },
+      "stage_J_crypto_erase": {
+        "stage": "J_crypto_erase_analysis",
+        "status": "NOT_APPLICABLE",
+        "device_type": "Storage Device Image",
+        "sanitization_type": "Cryptographic Erasure Verification",
+        "started_at": "2026-09-04T07:24:56Z",
+        "completed_at": "2026-09-04T07:24:56Z",
+        "duration": 0.004,
+        "is_encrypted_volume": false,
+        "detected_headers": [],
+        "sample_entropy": 0.064,
+        "candidates_found": 0,
+        "validated_candidates": 0,
+        "recovered_targets": 0,
+        "partial_targets": 0,
+        "rejected_candidates": 0,
+        "reason": "N/A \u2014 Evidence media is unencrypted (Sample entropy: 0.06 bits/byte). Cryptographic erasure was not applied.",
+        "evidence_offsets": [],
+        "confidence": "HIGH"
+      }
+    },
+    "sanitization_artifacts": [],
+    "summary": {
+      "total_sanitization_stages": 10,
+      "stages_completed": 4,
+      "stages_na": 3,
+      "stages_not_accessible": 1,
+      "stages_no_evidence": 2,
+      "total_residual_candidates": 1,
+      "total_sector_blocks_found": 0,
+      "reconstructed_artifacts": 1
+    }
+  },
+  "validated_artifacts": [
+    {
+      "file": "RECON_RESIDUAL_0001_2048.png",
+      "validation_status": "VALID",
+      "confidence": "HIGH",
+      "reason": "PNG magic header and IEND chunk verified.",
+      "size_bytes": 45,
+      "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+      "relative_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/reconstructed/RECON_RESIDUAL_0001_2048.png"
+    },
+    {
+      "file": "RESIDUAL_0001_2048.png",
+      "validation_status": "VALID",
+      "confidence": "HIGH",
+      "reason": "PNG magic header and IEND chunk verified.",
+      "size_bytes": 45,
+      "sha256": "d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f",
+      "relative_path": "tests/test_cases/test_pipe_1788506695/recovery/sanitization/residuals/RESIDUAL_0001_2048.png"
+    }
+  ],
+  "validation_summary": {
+    "VALID": 2,
+    "PARTIALLY_VALID": 0,
+    "REJECTED": 0,
+    "UNVERIFIED_GENERIC": 0
+  }
+}

@@ -17,6 +17,7 @@ import {
   FileLock,
   Network,
   Eye,
+  Search,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -25,10 +26,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
 
 const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
   { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
@@ -40,6 +43,7 @@ const workerNavItems = [
 const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
   { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
@@ -57,11 +61,32 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const [role, setRole] = React.useState('worker');
   const [mounted, setMounted] = React.useState(false);
+  const [isLocked, setIsLocked] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
     setRole(getRoleFromCookie());
+    setIsLocked(isFarisLocked());
+
+    const handleLockChange = (e: any) => {
+      setIsLocked(Boolean(e.detail?.locked ?? isFarisLocked()));
+    };
+
+    window.addEventListener('faris-lock-change', handleLockChange);
+    return () => {
+      window.removeEventListener('faris-lock-change', handleLockChange);
+    };
   }, [pathname]);
+
+  const handleNavClick = (e: React.MouseEvent, targetHref: string) => {
+    if (isFarisLocked()) {
+      if (targetHref !== '/faris' && !targetHref.startsWith('/faris/')) {
+        e.preventDefault();
+        e.stopPropagation();
+        showNavigationLockedAlert();
+      }
+    }
+  };
 
   if (!mounted) {
     return (
@@ -79,6 +104,7 @@ export default function AppSidebar() {
         <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
           <Link
             href={`${base_path}/dashboard`}
+            onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
             className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
           >
             <ShieldCheck className="h-4 w-4 transition-all group-hover:scale-110" />
@@ -90,16 +116,20 @@ export default function AppSidebar() {
               <TooltipTrigger asChild>
                 <Link
                   href={item.href}
+                  onClick={(e) => handleNavClick(e, item.href)}
                   className={cn(
                     'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8',
-                    (pathname === item.href || pathname.startsWith(`${item.href}/`)) && 'bg-accent text-accent-foreground'
+                    (pathname === item.href || pathname.startsWith(`${item.href}/`)) && 'bg-accent text-accent-foreground',
+                    isLocked && item.href !== '/faris' && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <item.icon className="h-5 w-5" />
                   <span className="sr-only">{item.label}</span>
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
+              <TooltipContent side="right">
+                {isLocked && item.href !== '/faris' ? `${item.label} (Locked during recovery)` : item.label}
+              </TooltipContent>
             </Tooltip>
           ))}
         </nav>
@@ -108,7 +138,11 @@ export default function AppSidebar() {
             <TooltipTrigger asChild>
               <Link
                 href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8"
+                onClick={(e) => handleNavClick(e, '#')}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
+                  isLocked && "opacity-60 cursor-not-allowed"
+                )}
               >
                 <Settings className="h-5 w-5" />
                 <span className="sr-only">Settings</span>

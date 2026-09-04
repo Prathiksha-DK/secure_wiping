@@ -54,6 +54,14 @@ Follow this guide to start the necessary services for local development and vali
 - **Health / Test URL**: `http://localhost:8743/health`
 - **Safety**: **DESTRUCTIVE** if a POST request is sent to `/wipe-pendrive`. Leave OFF unless testing the `/health` status endpoint.
 
+### TERMINAL 6: FARIS Forensic Recovery Service
+- **Service Name**: FARIS REST Integration Service
+- **Directory**: `D:\wiping\FARIS\application`
+- **Command**: `python faris_service.py`
+- **Port**: `8760`
+- **Health / Test URL**: `http://localhost:8760/api/faris/health`
+- **Safety**: Safe (Read-Only Forensic Recovery & Validation)
+
 ---
 
 ## Services to Leave OFF During Development

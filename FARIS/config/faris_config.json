@@ -1,0 +1,49 @@
+{
+  "system_name": "FARIS",
+  "full_name": "Forensic Adaptive Recovery and Integrity System",
+  "version": "1.0.0",
+  "operating_mode": "OFFLINE_AIR_GAPPED",
+  "default_cluster_size": 4096,
+  "default_sector_size": 512,
+  "max_parallel_workers": 4,
+  "default_partition_offset": "AUTO",
+  "default_scan_limit_bytes": null,
+  "read_only_enforced": true,
+  "audit_chain_algorithm": "SHA-256",
+  "supported_evidence_formats": [
+    "E01",
+    "EWF",
+    "RAW",
+    "DD",
+    "BIN",
+    "VMEM",
+    "DMP"
+  ],
+  "engines": {
+    "sleuthkit": {
+      "path": "engines/sleuthkit/bin",
+      "version": "4.15.0",
+      "status": "BUNDLED"
+    },
+    "libewf": {
+      "path": "engines/libewf",
+      "version": "20230405",
+      "status": "BUNDLED"
+    },
+    "sqlite_runtime": {
+      "path": "embedded",
+      "version": "3.45+",
+      "status": "BUNDLED"
+    },
+    "photorec": {
+      "path": "engines/photorec",
+      "version": "7.2",
+      "status": "OPTIONAL_EVALUATED"
+    },
+    "volatility": {
+      "path": "engines/volatility",
+      "version": "2.5.0+",
+      "status": "OPTIONAL_EVALUATED"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "case_id": "test_pipe_1788498906",
+  "evidence_image": "pipeline_test.raw",
+  "partition_offset": 0,
+  "branches": {
+    "metadata_recovery": {
+      "status": "COMPLETED",
+      "artifacts_processed": 0,
+      "artifacts_valid": 0,
+      "fallback_needed": 0,
+      "output_dir": "tests/test_cases/test_pipe_1788498906/recovery/metadata",
+      "recovered_records": []
+    },
+    "file_carving": {
+      "status": "COMPLETED",
+      "artifacts_carved": 0,
+      "unique_carved_artifacts": 0,
+      "output_dir": "tests/test_cases/test_pipe_1788498906/recovery/carved",
+      "artifacts": []
+    },
+    "fragment_recovery": {
+      "status": "NO_CANDIDATES",
+      "fragments_analyzed": 0,
+      "compatibility_evaluations": 0,
+      "notes": "No fragmented artifact candidates identified in unallocated space."
+    },
+    "ai_fragment_ranking": {
+      "status": "N/A",
+      "candidates_ranked": 0,
+      "ranking_details": [],
+      "notes": "N/A \u2014 No fragmented candidates requiring statistical AI ranking."
+    },
+    "database_recovery": {
+      "status": "N/A",
+      "detected_type": "None",
+      "notes": "N/A \u2014 No SQLite database artifacts or signatures detected in evidence.",
+      "sqlite_deep_results": {
+        "total_pages_carved": 0,
+        "total_active_records": 0,
+        "total_deleted_records": 0,
+        "database_reconstructed": false,
+        "database_file": ""
+      }
+    },
+    "memory_recovery": {
+      "status": "N/A",
+      "evidence_type": "Disk Image / Storage Volume",
+      "notes": "N/A \u2014 No volatile memory evidence supplied (disk storage evidence).",
+      "processes_recovered": 0,
+      "network_artifacts_recovered": 0,
+      "artifacts": []
+    },
+    "headerless_extraction": {
+      "status": "COMPLETED",
+      "notes": "Stream boundary analysis evaluated."
+    },
+    "correlation_graph": {
+      "status": "COMPLETED",
+      "provenance_links": 0
+    },
+    "anti_forensics": {
+      "status": "COMPLETED",
+      "residual_artifacts_found": 0,
+      "output_dir": "tests/test_cases/test_pipe_1788498906/recovery/anti_forensics",
+      "artifacts": []
+    }
+  },
+  "master_provenance": [],
+  "summary_metrics": {
+    "total_discovered_artifacts": 0,
+    "metadata_attempts": 0,
+    "metadata_successes": 0,
+    "carving_attempts": 0,
+    "carving_unique_successes": 0,
+    "fully_recovered": 0,
+    "partially_recovered": 0,
+    "unverified": 0,
+    "unrecoverable": 0,
+    "deduplicated_count": 0
+  }
+}

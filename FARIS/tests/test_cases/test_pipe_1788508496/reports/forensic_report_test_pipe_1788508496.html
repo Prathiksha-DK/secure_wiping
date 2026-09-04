@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FARIS Forensic Report — Case test_pipe_1788508496</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 30px; background-color: #f8fafc; color: #1e293b; }
+        .header { border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
+        h1 { margin: 0 0 10px 0; color: #0f172a; font-size: 26px; }
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 8px; }
+        .card-value { font-size: 20px; font-weight: 700; color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 8px; overflow: hidden; margin-top: 15px; border: 1px solid #e2e8f0; }
+        th, td { padding: 12px 16px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #f1f5f9; font-weight: 600; color: #334155; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .badge-valid { background: #dcfce7; color: #166534; }
+        .badge-medium { background: #fef9c3; color: #854d0e; }
+        .badge-low { background: #fee2e2; color: #991b1b; }
+        .badge-ok { background: #e0f2fe; color: #0369a1; }
+        .hash { font-family: monospace; font-size: 11px; color: #475569; word-break: break-all; }
+        h2 { font-size: 18px; color: #0f172a; margin-top: 30px; }
+        .footer { margin-top: 50px; font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>FARIS — Forensic Recovery & Verification Report</h1>
+        <div><strong>Case ID:</strong> test_pipe_1788508496 &nbsp;|&nbsp; <strong>Generated:</strong> 2026-09-04T07:54:57.919718+00:00 &nbsp;|&nbsp; <strong>Examiner:</strong> Automated Tester</div>
+    </div>
+
+    <div class="meta-grid">
+        <div class="card">
+            <div class="card-title">Valid Recovered</div>
+            <div class="card-value" style="color: #16a34a;">0</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Partially Valid</div>
+            <div class="card-value" style="color: #ca8a04;">0</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Rejected / False Positives</div>
+            <div class="card-value" style="color: #dc2626;">2</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Audit Chain Integrity</div>
+            <div class="card-value" style="color: #0284c7;">INTEGRITY_VERIFIED</div>
+        </div>
+    </div>
+
+    <h2>Bundled Forensic Engines</h2>
+    <table>
+        <tr><th>Engine</th><th>Version</th><th>Status</th></tr>
+        <tr><td>The Sleuth Kit (TSK)</td><td>The Sleuth Kit ver 4.15.0</td><td><span class="badge badge-valid">Active</span></td></tr>
+        <tr><td>libewf</td><td>ewfinfo 20230405</td><td><span class="badge badge-valid">Active</span></td></tr>
+        <tr><td>PhotoRec / Native Carver</td><td>FARIS Zero-Dependency Signature Carver</td><td><span class="badge badge-valid">Active</span></td></tr>
+    </table>
+
+    <h2>Recovered & Validated Artifacts Catalog</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Artifact</th>
+                <th>Status</th>
+                <th>Confidence</th>
+                <th>Size (Bytes)</th>
+                <th>SHA-256 Provenance Hash</th>
+                <th>Forensic Explanation</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            <tr>
+                <td><strong>RESIDUAL_0001_5161.jpg</strong></td>
+                <td><span class="badge badge-low">REJECTED_NULL_FILL</span></td>
+                <td><strong>LOW</strong></td>
+                <td>2,070</td>
+                <td class="hash">9b519a84d6303aa0f37d20484cef13247bd615531993556e6d4ae1dba067a261</td>
+                <td>False-recovery detection: >98% null bytes (sparse zero-fill).</td>
+            </tr>
+
+            <tr>
+                <td><strong>RESIDUAL_0002_1024.png</strong></td>
+                <td><span class="badge badge-low">REJECTED_NULL_FILL</span></td>
+                <td><strong>LOW</strong></td>
+                <td>4,137</td>
+                <td class="hash">dfb551954379a60c722533740092e2570b433f43b5a7b11f445f3e377a528bae</td>
+                <td>False-recovery detection: >98% null bytes (sparse zero-fill).</td>
+            </tr>
+
+        </tbody>
+    </table>
+
+    <h2>Specialized Sanitization Recovery Analysis</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Stage</th>
+                <th>Status</th>
+                <th>Sanitization Type / Media</th>
+                <th>Confidence</th>
+                <th>Forensic Finding / Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            <tr>
+                <td><strong>Stage A: Overwrite Pattern Analysis</strong></td>
+                <td><span class="badge badge-valid">COMPLETED</span></td>
+                <td>UNIFORM_ZERO_FILL_SINGLE_PASS</td>
+                <td><strong>HIGH</strong></td>
+                <td>Single-pass zero overwrite verified (NIST 800-88 Clear / Quick Wipe)</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage B: Residual Data / Remnant Analysis</strong></td>
+                <td><span class="badge badge-valid">RESIDUAL_EVIDENCE_FOUND</span></td>
+                <td>Residual Analysis</td>
+                <td><strong>MEDIUM</strong></td>
+                <td>Identified 2 unvalidated raw data remnants.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage C: Sector / Block-Level Recovery</strong></td>
+                <td><span class="badge badge-low">NO_RECOVERABLE_EVIDENCE</span></td>
+                <td>Physical Sector & Block Level Recovery</td>
+                <td><strong>HIGH</strong></td>
+                <td>No surviving sector or block-level remnants identified (all inspected sectors uniformly sanitized).</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage D: Multi-Pass Pattern Analysis</strong></td>
+                <td><span class="badge badge-valid">COMPLETED</span></td>
+                <td>Pattern Consistent with NIST SP 800-88 Clear / Single-Pass Zero</td>
+                <td><strong>HIGH</strong></td>
+                <td>100% of analyzed sectors contain uniform 0x00 pattern. Consistent with NIST SP 800-88 Clear or completed single-pass zero wipe. Note: A static forensic image characterizes the observed final byte pattern, but cannot independently prove the historical number or order of prior sanitization passes.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage E: File-System Journal / Log Analysis</strong></td>
+                <td><span class="badge badge-ok">NOT_APPLICABLE</span></td>
+                <td>UNKNOWN Journal & Transaction Log Analysis</td>
+                <td><strong>HIGH</strong></td>
+                <td>N/A — No supported journaling filesystem identified on evidence partition.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage F: SSD / NAND Remnant Analysis</strong></td>
+                <td><span class="badge badge-ok">NOT_ACCESSIBLE</span></td>
+                <td>Unknown Storage Media NAND/FTL Architecture Evaluation</td>
+                <td><strong>HIGH</strong></td>
+                <td>Controller-level raw NAND flash chips and internal Flash Translation Layer (FTL) wear-leveling tables are inaccessible through standard bit-stream E01 image (Unknown Storage Media). Direct hardware chip-off extraction or specialized vendor diagnostic JTAG/UART protocol required for physical NAND examination.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage G: Wear-Leveling Analysis</strong></td>
+                <td><span class="badge badge-ok">NOT_ACCESSIBLE</span></td>
+                <td>Unknown Storage Media Wear-Leveling Architecture Evaluation</td>
+                <td><strong>HIGH</strong></td>
+                <td>Physical wear-leveling pool allocation tables and block erase cycle counters are managed internally by the storage controller firmware (Unknown Storage Media). They cannot be extracted from a standard logical LBA bit-stream (.E01 / raw). Hardware chip-off or vendor JTAG diagnostics required for controller-internal metrics.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage H: Hidden / Unallocated Area Analysis</strong></td>
+                <td><span class="badge badge-low">NO_RECOVERABLE_EVIDENCE</span></td>
+                <td>Partition Gap, Slack & Unallocated Area Analysis</td>
+                <td><strong>HIGH</strong></td>
+                <td>All partition gaps, slack areas, and unallocated clusters are completely sanitized / zero-filled.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage I: Previous-State Reconstruction</strong></td>
+                <td><span class="badge badge-low">NO_RECOVERABLE_EVIDENCE</span></td>
+                <td>Previous-State & Fragment Reconstruction</td>
+                <td><strong>HIGH</strong></td>
+                <td>No surviving fragment chains could be structurally reconstructed into valid previous-state files.</td>
+            </tr>
+
+            <tr>
+                <td><strong>Stage J: Cryptographic-Erasure Analysis</strong></td>
+                <td><span class="badge badge-ok">NOT_APPLICABLE</span></td>
+                <td>Cryptographic Erasure Verification</td>
+                <td><strong>HIGH</strong></td>
+                <td>N/A — Evidence media is unencrypted (Sample entropy: 0.01 bits/byte). Cryptographic erasure was not applied.</td>
+            </tr>
+
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Generated by FARIS (Forensic Adaptive Recovery and Integrity System) v1.0.0 — Offline & Air-Gapped Verification Standard
+    </div>
+</body>
+</html>
