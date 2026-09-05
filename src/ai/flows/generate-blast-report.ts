@@ -70,11 +70,13 @@ export async function generateBlastReport(input: BomberGameInput): Promise<Bombe
     });
 }
 
-const prompt = ai.definePrompt({
-  name: 'generateBlastReportPrompt',
-  input: { schema: z.object({ pattern: z.string(), bombsUsed: z.number(), gridSize: z.string(), extractionEfficiency: z.number() }) },
-  output: { schema: BomberGameOutputSchema },
-  prompt: `You are a "Blast Pattern Analyst" for an elite data extraction squad.
+const prompt = ai.definePrompt(
+  {
+    name: 'generateBlastReportPrompt',
+    input: { schema: z.object({ pattern: z.string(), bombsUsed: z.number(), gridSize: z.string(), extractionEfficiency: z.number() }) },
+    output: { schema: BomberGameOutputSchema },
+  },
+  `You are a "Blast Pattern Analyst" for an elite data extraction squad.
 Your mission is to analyze the provided data grid, which shows the results of a "bombing run" on a secure data fortress.
 
 - The grid consists of '0's, '1's, and '-' characters.
@@ -90,8 +92,8 @@ Here is the extracted data pattern:
 {{{pattern}}}
 ---
 
-Based on the pattern, bombs used, grid size, and efficiency, provide your analysis in the required JSON format.`,
-});
+Based on the pattern, bombs used, grid size, and efficiency, provide your analysis in the required JSON format.`
+);
 
 const generateBlastReportFlow = ai.defineFlow(
   {

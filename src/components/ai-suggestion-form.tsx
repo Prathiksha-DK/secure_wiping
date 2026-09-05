@@ -43,8 +43,7 @@ export default function AiSuggestionForm() {
     setIsPending(true);
     const formData = new FormData();
     formData.append("dataType", values.dataType);
-    formData.append("securityLevel", values.securityLevel);
-    await formAction(formData);
+    await (formAction as any)(formData);
     setIsPending(false);
   };
 

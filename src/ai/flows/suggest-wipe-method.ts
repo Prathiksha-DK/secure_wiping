@@ -39,11 +39,13 @@ export async function suggestWipeMethod(input: SuggestWipeMethodInput): Promise<
   return suggestWipeMethodFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'suggestWipeMethodPrompt',
-  input: {schema: SuggestWipeMethodInputSchema},
-  output: {schema: SuggestWipeMethodOutputSchema},
-  prompt: `You are an expert in data security and data wiping methods. Based on the user's input about the type of data they want to remove and their desired level of security, you will suggest the most appropriate data wiping method.
+const prompt = ai.definePrompt(
+  {
+    name: 'suggestWipeMethodPrompt',
+    input: {schema: SuggestWipeMethodInputSchema},
+    output: {schema: SuggestWipeMethodOutputSchema},
+  },
+  `You are an expert in data security and data wiping methods. Based on the user's input about the type of data they want to remove and their desired level of security, you will suggest the most appropriate data wiping method.
 
   Type of data to remove: {{{dataType}}}
   Desired level of security: {{{securityLevel}}}
@@ -59,8 +61,8 @@ const prompt = ai.definePrompt({
   {
     "wipeMethod": "The name of the recommended data wiping method",
     "reasoning": "A detailed explanation of why this method is the most suitable given the user's data type and security needs."
-  }`,
-});
+  }`
+);
 
 const suggestWipeMethodFlow = ai.defineFlow(
   {
