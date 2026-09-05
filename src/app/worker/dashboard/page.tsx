@@ -22,6 +22,9 @@ import {
   ArrowRight,
   BarChart3,
   Loader2,
+  Search,
+  Eye,
+  Gamepad2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -127,7 +130,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="glow-primary">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Wipes</CardTitle>
@@ -174,7 +177,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Devices Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Connected Devices */}
@@ -411,18 +414,28 @@ export default function DashboardPage() {
                 </Link>
               </Button>
               <Button variant="outline" size="sm" className="justify-start" asChild>
-                <Link href="/worker/restore">
-                  <Database className="mr-2 h-4 w-4 text-amber-500" /> Decrypt & Restore
+                <Link href="/faris">
+                  <Search className="mr-2 h-4 w-4 text-emerald-500" /> FARIS Recovery Scan
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" className="justify-start" asChild>
+                <Link href="/swarm">
+                  <Gamepad2 className="mr-2 h-4 w-4 text-purple-500" /> Fragment Hunter (Swarm)
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" className="justify-start" asChild>
+                <Link href="/inspector">
+                  <Eye className="mr-2 h-4 w-4 text-cyan-500" /> Storage Inspector (Hex)
                 </Link>
               </Button>
               <Button variant="outline" size="sm" className="justify-start" asChild>
                 <Link href="/worker/history">
-                  <FileClock className="mr-2 h-4 w-4 text-emerald-500" /> View History & Reports
+                  <FileClock className="mr-2 h-4 w-4 text-blue-500" /> View History & Reports
                 </Link>
               </Button>
               <Button variant="outline" size="sm" className="justify-start" asChild>
-                <Link href="/worker/iso-mode">
-                  <Activity className="mr-2 h-4 w-4 text-purple-500" /> ISO Boot Mode
+                <Link href="/iso-mode">
+                  <Activity className="mr-2 h-4 w-4 text-amber-500" /> ISO Boot Mode
                 </Link>
               </Button>
             </CardContent>

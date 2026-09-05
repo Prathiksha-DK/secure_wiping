@@ -407,18 +407,23 @@ if __name__ == "__main__":
         attachments = generate_certificate(certificate)
        
         # -----------------------------
-        # Send certificate to user
+        # Send certificate to user (via configured environment or input)
         # -----------------------------
         print("\nEnter email details to send certificate:")
-        sender_email = "cryptocore828@gmail.com"
-        sender_password = "zzqwoqrmzolavrii"
+        sender_email = os.environ.get("SECUREWIPE_SMTP_EMAIL", "")
+        sender_password = os.environ.get("SECUREWIPE_SMTP_PASSWORD", "")
+        if not sender_email:
+            sender_email = input("Sender Email (or set SECUREWIPE_SMTP_EMAIL): ").strip()
+        if not sender_password:
+            sender_password = input("Sender Password / App Key (or set SECUREWIPE_SMTP_PASSWORD): ").strip()
         receiver_email = input("Receiver Email: ").strip()
-       
-        send_email(
-            sender_email,
-            sender_password,
-            receiver_email,
-            subject="Data Wipe Verification Certificate - All Files Verified",
+
+        if sender_email and sender_password and receiver_email:
+            send_email(
+                sender_email,
+                sender_password,
+                receiver_email,
+                subject="Data Wipe Verification Certificate - All Files Verified",
             body=f"""Dear User,
 
 Please find attached your data wipe verification certificate and related files.

@@ -8,7 +8,8 @@ This server communicates with the main server on port 8586 to get user data.
 import os
 import signal
 import sys
-import requests
+import urllib.request
+import urllib.error
 from datetime import datetime
 import logging
 import json
@@ -38,18 +39,19 @@ def query_main_server(endpoint):
     """Helper function to query the main server"""
     try:
         url = f"{MAIN_SERVER_URL}/internal/{endpoint}"
-        response = requests.get(url, timeout=5)
-        
-        if response.status_code == 200:
-            return response.json(), 200
-        else:
-            logger.error(f"Main server returned status {response.status_code}")
-            return {'error': f'Main server error: {response.status_code}'}, response.status_code
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode('utf-8'))
+                return data, 200
+            else:
+                logger.error(f"Main server returned status {response.status}")
+                return {'error': f'Main server error: {response.status}'}, response.status
             
-    except requests.exceptions.ConnectionError:
-        logger.error("Could not connect to main server")
+    except urllib.error.URLError as e:
+        logger.error(f"Could not connect to main server: {e}")
         return {'error': 'Main server is not reachable. Please ensure it is running on port 8586.'}, 503
-    except requests.exceptions.Timeout:
+    except TimeoutError:
         logger.error("Request to main server timed out")
         return {'error': 'Main server request timed out'}, 504
     except Exception as e:
@@ -118,12 +120,13 @@ def health_check():
         
         # Check if main server is reachable
         try:
-            response = requests.get(f"{MAIN_SERVER_URL}/internal/status", timeout=3)
-            if response.status_code == 200:
-                health_status['main_server_connection'] = 'ok'
-            else:
-                health_status['main_server_connection'] = 'error'
-                health_status['status'] = 'degraded'
+            req = urllib.request.Request(f"{MAIN_SERVER_URL}/internal/status")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    health_status['main_server_connection'] = 'ok'
+                else:
+                    health_status['main_server_connection'] = 'error'
+                    health_status['status'] = 'degraded'
         except:
             health_status['main_server_connection'] = 'unreachable'
             health_status['status'] = 'degraded'
@@ -197,11 +200,12 @@ if __name__ == '__main__':
     try:
         # Check if main server is reachable on startup
         try:
-            response = requests.get(f"{MAIN_SERVER_URL}/internal/status", timeout=3)
-            if response.status_code == 200:
-                print(f'[+] Successfully connected to main server on {MAIN_SERVER_URL}')
-            else:
-                print(f'[!] Warning: Main server responded with status {response.status_code}')
+            req = urllib.request.Request(f"{MAIN_SERVER_URL}/internal/status")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    print(f'[+] Successfully connected to main server on {MAIN_SERVER_URL}')
+                else:
+                    print(f'[!] Warning: Main server responded with status {resp.status}')
         except:
             print(f'[!] Warning: Could not reach main server on {MAIN_SERVER_URL}')
             print('   Make sure the main server is running on port 8586')

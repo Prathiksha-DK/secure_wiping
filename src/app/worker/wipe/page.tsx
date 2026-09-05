@@ -228,10 +228,9 @@ function WipePageComponent() {
     // Use device type from /api/devices as primary indicator
     const isUsbType = (selectedDeviceDetails as any).type === 'USB' || (selectedDeviceDetails as any).type === 'USB Drive';
 
-    // Cross-check against pendrives list — only small FAT32 removable drives (<64 GB, non-NTFS)
-    let matchedPendrive = null;
+    let matchedPendrive: any = null;
     if (isUsbType) {
-      matchedPendrive = pendrives.find(p => p.size_gb < 64 && p.fstype !== 'NTFS');
+      matchedPendrive = selectedDeviceDetails as any;
     }
 
     if (isUsbType && matchedPendrive) {

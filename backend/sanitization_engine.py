@@ -675,12 +675,18 @@ def run_adaptive_sanitization(
     method: str = "dod-3pass",
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     operator: str = "system",
+    expected_fingerprint: Optional[str] = None,
     progress_cb=None,
 ) -> Dict[str, Any]:
     """
     Execute the full adaptive sanitization pipeline:
-    [Device Detection] -> [Sanitization] -> [Verification] -> [Recovery Assessment] -> [Decision] -> [Final Classification]
+    [Safety Validation] -> [Device Lock] -> [Sanitization] -> [Verification] -> [Recovery Assessment] -> [Decision] -> [Final Classification]
     """
+    from storage_safety import validate_storage_safety, acquire_device_lock, release_device_lock
+    from audit_log import record_audit_event
+    from certificate_engine import generate_sanitization_certificate
+    from compliance_engine import save_certificate
+
     session_id = f"SAN-{uuid.uuid4().hex[:10].upper()}"
     start_time = _now_ts()
     method_config = SANITIZATION_METHODS.get(method, SANITIZATION_METHODS["dod-3pass"])
@@ -707,121 +713,159 @@ def run_adaptive_sanitization(
         if progress_cb:
             progress_cb(msg, pct)
 
-    _emit("[STAGE 0] Device identification...", 2)
-    device_info = gather_device_info(target)
-    audit["device_info"] = device_info
-    target_type = device_info["target_type"]
-
-    _emit(f"[DEVICE] Type: {target_type} | Technology: {device_info.get('device_technology', 'unknown')} | Size: {device_info.get('size_bytes', 0)} bytes", 5)
-
-    if device_info.get("is_system_disk"):
+    _emit("[STAGE 0] Multi-Layer Storage Safety & Identity Validation...", 2)
+    safety = validate_storage_safety(target, expected_fingerprint=expected_fingerprint)
+    if not safety["safe"]:
+        reasons_text = "; ".join(safety["reasons"])
         audit["final_state"] = FINAL_STATE_FAIL
-        audit["final_reason"] = "SAFETY ABORT: System disk selected. Operation refused."
+        audit["final_reason"] = f"SAFETY ABORT: {reasons_text}"
+        audit["end_time"] = _now_ts()
+        record_audit_event(
+            event_type="SAFETY_REJECTED",
+            operator=operator,
+            target=target,
+            payload={"reasons": safety["reasons"], "session_id": session_id}
+        )
+        _finalize_audit(audit)
+        return audit
+
+    canonical_id = safety["canonical_id"]
+    lock_ok, lock_msg = acquire_device_lock(canonical_id, session_id, operator)
+    if not lock_ok:
+        audit["final_state"] = FINAL_STATE_FAIL
+        audit["final_reason"] = f"CONCURRENCY ABORT: {lock_msg}"
         audit["end_time"] = _now_ts()
         _finalize_audit(audit)
         return audit
 
-    iteration = 0
-    final_decision = None
+    try:
+        record_audit_event(
+            event_type="SANITIZATION_STARTED",
+            operator=operator,
+            target=target,
+            payload={"session_id": session_id, "method": method, "canonical_id": canonical_id}
+        )
 
-    while iteration < max_iterations:
-        iteration += 1
-        iteration_record: Dict[str, Any] = {
-            "iteration": iteration,
-            "start_time": _now_ts(),
-            "sanitization": {},
-            "verification": {},
-            "recovery_assessment": {},
-            "decision": {},
-        }
+        device_info = gather_device_info(target)
+        if safety.get("metadata"):
+            device_info.update(safety["metadata"])
+        audit["device_info"] = device_info
+        target_type = device_info.get("target_type", safety.get("target_type", "unknown"))
 
-        pct_base = 10 + (iteration - 1) * 25
-        _emit(f"[STAGE 1] Sanitization pass {iteration}/{max_iterations} using {method_config['label']}...", pct_base)
+        _emit(f"[DEVICE] Type: {target_type} | Technology: {device_info.get('device_technology', 'unknown')} | Size: {device_info.get('size_bytes', 0)} bytes", 5)
 
-        san_start = _now_ts()
-        san_stats: Dict[str, Any] = {}
-        san_ok = False
-        san_msg = ""
+        iteration = 0
+        final_decision = None
 
-        if target_type == "file":
-            san_ok, san_msg, san_stats = sanitize_file(target, method)
-        elif target_type == "folder":
-            san_ok, san_msg, san_stats = sanitize_folder(
-                target, method,
-                progress_cb=lambda idx, tot, fp: _emit(f"[WIPE] File {idx}/{tot}: {os.path.basename(fp)}", pct_base + 5)
+        while iteration < max_iterations:
+            iteration += 1
+            iteration_record: Dict[str, Any] = {
+                "iteration": iteration,
+                "start_time": _now_ts(),
+                "sanitization": {},
+                "verification": {},
+                "recovery_assessment": {},
+                "decision": {},
+            }
+
+            pct_base = 10 + (iteration - 1) * 25
+            _emit(f"[STAGE 1] Sanitization pass {iteration}/{max_iterations} using {method_config['label']}...", pct_base)
+
+            san_start = _now_ts()
+            san_stats: Dict[str, Any] = {}
+            san_ok = False
+            san_msg = ""
+
+            if target_type == "file":
+                san_ok, san_msg, san_stats = sanitize_file(target, method)
+            elif target_type == "folder":
+                san_ok, san_msg, san_stats = sanitize_folder(
+                    target, method,
+                    progress_cb=lambda idx, tot, fp: _emit(f"[WIPE] File {idx}/{tot}: {os.path.basename(fp)}", pct_base + 5)
+                )
+            elif target_type == "disk" and target.startswith("/dev/"):
+                san_ok, san_msg, san_stats = sanitize_disk_linux(
+                    target, method, device_info.get("size_bytes", 0),
+                    progress_cb=lambda pct: _emit(f"[WIPE] Disk write {pct}%", pct_base + pct // 5)
+                )
+            else:
+                try:
+                    from secure_encrypt_wipe import encrypt_and_wipe
+                    san_ok, san_msg = encrypt_and_wipe(target)
+                    san_stats = {"method": method, "label": method_config["label"]}
+                except Exception as e:
+                    san_ok, san_msg = False, str(e)
+                    san_stats = {}
+
+            iteration_record["sanitization"] = {
+                "method": method,
+                "label": method_config["label"],
+                "start_time": san_start,
+                "end_time": _now_ts(),
+                "success": san_ok,
+                "message": san_msg,
+                "stats": san_stats,
+            }
+
+            if not san_ok:
+                audit["errors"].append(f"Iteration {iteration}: sanitization failed - {san_msg}")
+                _emit(f"[ERROR] Sanitization failed: {san_msg}", pct_base + 8)
+
+            pct_ver = pct_base + 8
+            _emit(f"[STAGE 2] Multi-Region Sanitization Verification (iteration {iteration})...", pct_ver)
+            expected_pat = (
+                method_config.get("patterns", [b"\x00"])[-1]
+                if method_config.get("patterns") and method_config.get("patterns")[-1] is not None
+                else None
             )
-        elif target_type == "disk" and target.startswith("/dev/"):
-            san_ok, san_msg, san_stats = sanitize_disk_linux(
-                target, method, device_info.get("size_bytes", 0),
-                progress_cb=lambda pct: _emit(f"[WIPE] Disk write {pct}%", pct_base + pct // 5)
+            verification = verify_sanitization(
+                target, target_type, device_info.get("size_bytes", 0),
+                expected_pattern=expected_pat,
+                strategy="stratified",
             )
-        else:
-            try:
-                from secure_encrypt_wipe import encrypt_and_wipe
-                san_ok, san_msg = encrypt_and_wipe(target)
-                san_stats = {"method": method, "label": method_config["label"]}
-            except Exception as e:
-                san_ok, san_msg = False, str(e)
-                san_stats = {}
+            iteration_record["verification"] = verification
+            _emit(f"[VERIFY] Status: {verification['status']} | Coverage: {verification.get('verified_coverage_pct', 0)}% | Details: {verification.get('details', '')}", pct_ver + 3)
 
-        iteration_record["sanitization"] = {
-            "method": method,
-            "label": method_config["label"],
-            "start_time": san_start,
-            "end_time": _now_ts(),
-            "success": san_ok,
-            "message": san_msg,
-            "stats": san_stats,
-        }
+            pct_rec = pct_ver + 5
+            _emit(f"[STAGE 3] Forensic Recovery Assessment (Streaming file signature & structure carver)...", pct_rec)
+            recovery = assess_recovery(
+                target, target_type,
+                total_bytes=device_info.get("size_bytes", 0),
+                progress_cb=lambda info: _emit(f"[FORENSIC SCAN] {info.get('bytes_scanned', 0)} / {info.get('total_bytes', 0)} bytes ({info.get('percentage', 0)}%) | Validated: {info.get('validated_count', 0)} | Candidates: {info.get('candidates_count', 0)}", pct_rec + int(info.get('percentage', 0) * 0.05)),
+            )
+            evidence_level = recovery.get("evidence_level", "NO_EVIDENCE")
+            confidence = recovery.get("confidence_score", 0.0)
+            classification_map = {
+                "NO_EVIDENCE": "NO_RECOVERABLE_DATA_DETECTED",
+                "LOW_CONFIDENCE_TRACE": "NO_RECOVERABLE_DATA_DETECTED",
+                "PROBABLE_RECOVERABLE_ARTIFACT": "PARTIAL_DATA_RECOVERED",
+                "VALIDATED_RECOVERABLE_ARTIFACT": "SIGNIFICANT_DATA_RECOVERED",
+            }
+            recovery["classification"] = classification_map.get(evidence_level, "ASSESSMENT_NOT_CONCLUSIVE")
+            recovery["detail"] = recovery.get("summary_reason", "")
+            iteration_record["recovery_assessment"] = recovery
+            _emit(f"[RECOVER] Evidence: {evidence_level} (Confidence: {confidence}%) | Validated Artifacts: {recovery.get('counts', {}).get('level_3_validated_artifacts', 0)}", pct_rec + 5)
 
-        if not san_ok:
-            audit["errors"].append(f"Iteration {iteration}: sanitization failed - {san_msg}")
-            _emit(f"[ERROR] Sanitization failed: {san_msg}", pct_base + 8)
+            pct_dec = pct_rec + 6
+            _emit(f"[STAGE 4] Adaptive Evidence Decision Engine (iteration {iteration})...", pct_dec)
+            decision = make_decision(
+                verification, recovery,
+                device_info.get("device_technology", "unknown"),
+                iteration, max_iterations
+            )
+            iteration_record["decision"] = decision
+            audit["iterations"].append(iteration_record)
 
-        pct_ver = pct_base + 8
-        _emit(f"[STAGE 2] Multi-Region Sanitization Verification (iteration {iteration})...", pct_ver)
-        expected_pat = (
-            method_config.get("patterns", [b"\x00"])[-1]
-            if method_config.get("patterns") and method_config.get("patterns")[-1] is not None
-            else None
-        )
-        verification = verify_sanitization(
-            target, target_type, device_info.get("size_bytes", 0),
-            expected_pattern=expected_pat,
-            strategy="stratified",
-        )
-        iteration_record["verification"] = verification
-        _emit(f"[VERIFY] Status: {verification['status']} | Coverage: {verification.get('verified_coverage_pct', 0)}% | Details: {verification.get('details', '')}", pct_ver + 3)
+            _emit(f"[DECISION] Action: {decision['action']} - {decision['reason']}", pct_dec + 3)
 
-        pct_rec = pct_ver + 5
-        _emit(f"[STAGE 3] Forensic Recovery Assessment (Streaming file signature & structure carver)...", pct_rec)
-        recovery = assess_recovery(
-            target, target_type,
-            total_bytes=device_info.get("size_bytes", 0),
-            progress_cb=lambda info: _emit(f"[FORENSIC SCAN] {info.get('bytes_scanned', 0)} / {info.get('total_bytes', 0)} bytes ({info.get('percentage', 0)}%) | Validated: {info.get('validated_count', 0)} | Candidates: {info.get('candidates_count', 0)}", pct_rec + int(info.get('percentage', 0) * 0.05)),
-        )
-        iteration_record["recovery_assessment"] = recovery
-        evidence_level = recovery.get("evidence_level", "NO_EVIDENCE")
-        confidence = recovery.get("confidence_score", 0.0)
-        _emit(f"[RECOVER] Evidence: {evidence_level} (Confidence: {confidence}%) | Validated Artifacts: {recovery.get('counts', {}).get('level_3_validated_artifacts', 0)}", pct_rec + 5)
+            if decision["action"] != "RETRY":
+                final_decision = decision
+                break
 
-        pct_dec = pct_rec + 6
-        _emit(f"[STAGE 4] Adaptive Evidence Decision Engine (iteration {iteration})...", pct_dec)
-        decision = make_decision(
-            verification, recovery,
-            device_info.get("device_technology", "unknown"),
-            iteration, max_iterations
-        )
-        iteration_record["decision"] = decision
-        audit["iterations"].append(iteration_record)
+            _emit(f"[RETRY] Re-sanitization required. Starting iteration {iteration + 1}...", pct_dec + 5)
 
-        _emit(f"[DECISION] Action: {decision['action']} - {decision['reason']}", pct_dec + 3)
-
-        if decision["action"] != "RETRY":
-            final_decision = decision
-            break
-
-        _emit(f"[RETRY] Re-sanitization required. Starting iteration {iteration + 1}...", pct_dec + 5)
+    finally:
+        release_device_lock(canonical_id, session_id)
 
     if final_decision is None:
         final_decision = {
@@ -839,6 +883,30 @@ def run_adaptive_sanitization(
     _emit(f"[FINAL] Reason: {audit['final_reason']}", 99)
 
     _finalize_audit(audit)
+
+    # Generate and persist Schema v1.0 Certificate with Digital Signature
+    try:
+        cert = generate_sanitization_certificate(audit)
+        save_certificate(cert)
+        audit["certificate_id"] = cert.get("certificate_id")
+        audit["certificate_digest"] = cert.get("integrity", {}).get("digest")
+    except Exception as cert_err:
+        audit["errors"].append(f"Certificate generation error: {cert_err}")
+
+    # Record completion in audit trail
+    record_audit_event(
+        event_type="SANITIZATION_COMPLETED" if audit["final_state"] == FINAL_STATE_PASS else "SANITIZATION_FAILED",
+        operator=operator,
+        target=target,
+        payload={
+            "session_id": session_id,
+            "final_state": audit["final_state"],
+            "total_iterations": iteration,
+            "tamper_hash": audit.get("tamper_hash"),
+            "certificate_id": audit.get("certificate_id")
+        }
+    )
+
     return audit
 
 

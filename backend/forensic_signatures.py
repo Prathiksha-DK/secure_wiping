@@ -389,11 +389,57 @@ def validate_rar(data: bytes, offset: int) -> Optional[ValidationResult]:
     return None
 
 
+def validate_sqlite(data: bytes, offset: int) -> Optional[ValidationResult]:
+    """Validate SQLite 3 database header (SQLite format 3\\x00, valid page size, page header)."""
+    SQLITE_MAGIC = b"SQLite format 3\x00"
+    if len(data) < offset + 16 or data[offset:offset + 16] != SQLITE_MAGIC:
+        return None
+
+    level = 1
+    confidence = 0.50
+    details = "SQLite v3 magic signature verified"
+    extracted_size = 100
+
+    # Level 2: Validate database page size & format version
+    if len(data) >= offset + 100:
+        raw_page_size = struct.unpack(">H", data[offset + 16:offset + 18])[0]
+        page_size = 65536 if raw_page_size == 1 else raw_page_size
+        write_ver = data[offset + 18]
+        read_ver = data[offset + 19]
+        text_encoding = struct.unpack(">I", data[offset + 56:offset + 60])[0] if len(data) >= offset + 60 else 1
+
+        # Valid page sizes in SQLite are powers of 2 between 512 and 65536
+        valid_page = page_size in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536)
+        valid_ver = write_ver in (1, 2) and read_ver in (1, 2)
+        valid_enc = text_encoding in (1, 2, 3)
+
+        if valid_page and valid_ver and valid_enc:
+            level = 2
+            confidence = 0.85
+            extracted_size = max(page_size, 1024)
+            enc_names = {1: "UTF-8", 2: "UTF-16le", 3: "UTF-16be"}
+            details = f"SQLite Database (Page Size: {page_size}B, Encoding: {enc_names.get(text_encoding, 'UTF-8')}, Format: v{write_ver})"
+
+            # Level 3: Check b-tree page header at offset 100
+            # Root page type: 0x0d = Leaf Table, 0x05 = Interior Table, 0x0a = Leaf Index, 0x02 = Interior Index
+            if len(data) >= offset + 108:
+                page_type = data[offset + 100]
+                if page_type in (0x0d, 0x05, 0x0a, 0x02):
+                    cell_count = struct.unpack(">H", data[offset + 103:offset + 105])[0]
+                    level = 3
+                    confidence = 0.98
+                    page_desc = "Leaf Table" if page_type == 0x0d else ("Interior Table" if page_type == 0x05 else "Index")
+                    details = f"Validated SQLite Database ({page_desc} root page, {cell_count} cells, page size {page_size}B)"
+
+    return ValidationResult("SQLITE", level, confidence, extracted_size, details, is_fragmented=not (level == 3), header_offset=offset)
+
+
 # -----------------------------------------------------------
 # Master Forensic Dispatcher
 # -----------------------------------------------------------
 
 FORENSIC_VALIDATORS = [
+    (b"SQLite format 3\x00", validate_sqlite),
     (b"\xff\xd8\xff", validate_jpeg),
     (b"\x89PNG\r\n\x1a\n", validate_png),
     (b"%PDF-", validate_pdf),

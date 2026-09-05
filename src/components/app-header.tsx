@@ -48,14 +48,14 @@ import React from 'react';
 import { logout } from '@/app/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
+import { Gamepad2 } from 'lucide-react';
 
 const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
+  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
   { href: '/worker/history', icon: History, label: 'History & Audit' },
   { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
   { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
@@ -63,11 +63,11 @@ const workerNavItems = [
 
 const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
+  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
-  { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/history', icon: History, label: 'History & Audit' },
   { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
 ];
@@ -84,6 +84,7 @@ export default function AppHeader() {
   const [role, setRole] = React.useState('worker');
   const [mounted, setMounted] = React.useState(false);
   const [isLocked, setIsLocked] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
@@ -106,8 +107,10 @@ export default function AppHeader() {
         e.preventDefault();
         e.stopPropagation();
         showNavigationLockedAlert();
+        return;
       }
     }
+    setMobileMenuOpen(false);
   };
 
   if (!mounted) {
@@ -123,7 +126,7 @@ export default function AppHeader() {
   return (
     <>
       <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <Sheet>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button size="icon" variant="outline" className="sm:hidden">
               <PanelLeft className="h-5 w-5" />

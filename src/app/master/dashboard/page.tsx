@@ -24,12 +24,14 @@ import {
   XCircle,
   Loader2,
   Trash2,
-  Undo,
   History,
   Activity,
   Usb,
   FileText,
   AlertTriangle,
+  Search,
+  Eye,
+  Gamepad2,
 } from "lucide-react";
 
 const API_BASE = "http://localhost:9758";
@@ -126,7 +128,7 @@ export default function MasterDashboardPage() {
       </div>
 
       {/* Quick Launchers */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="hover:border-primary/50 transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-semibold">Adaptive Wiper</CardTitle>
@@ -155,13 +157,13 @@ export default function MasterDashboardPage() {
 
         <Card className="hover:border-primary/50 transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">Decrypt & Restore</CardTitle>
-            <Undo className="h-5 w-5 text-emerald-500" />
+            <CardTitle className="text-sm font-semibold">FARIS Recovery</CardTitle>
+            <Search className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Recover or decrypt device data from encrypted backup.</p>
+            <p className="text-xs text-muted-foreground">Perform forensic residual analysis and data reconstruction.</p>
             <Button size="sm" className="w-full mt-2" asChild>
-              <Link href="/restore">Launch Restore</Link>
+              <Link href="/faris">Launch FARIS</Link>
             </Button>
           </CardContent>
         </Card>
@@ -181,7 +183,7 @@ export default function MasterDashboardPage() {
       </div>
 
       {/* Assurance State Stats */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="glow-primary">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Operations</CardTitle>
@@ -227,7 +229,7 @@ export default function MasterDashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Host Station Information */}
         <Card>
           <CardHeader>
@@ -343,8 +345,8 @@ export default function MasterDashboardPage() {
               No recent sanitization sessions recorded.
             </div>
           ) : (
-            <div className="rounded-lg border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded-lg border overflow-x-auto min-w-0">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="bg-muted/50 text-xs">
                     <th className="text-left p-3 font-medium">Session ID</th>

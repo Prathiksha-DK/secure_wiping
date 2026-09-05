@@ -20,10 +20,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "./ui/form";
 
 
-const initialState = {
-  wipeMethod: null,
-  reasoning: null,
-};
+const initialState: { wipeMethod?: string; reasoning?: string; error?: string } = {};
 
 const formSchema = z.object({
   dataType: z.string().min(1, "Please select a data type."),
@@ -31,7 +28,7 @@ const formSchema = z.object({
 });
 
 export default function AiSuggestionForm() {
-  const [state, formAction] = useFormState(suggestWipeMethodAction, initialState);
+  const [state, formAction] = useFormState(suggestWipeMethodAction as any, initialState);
   const [isPending, setIsPending] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -108,11 +105,11 @@ export default function AiSuggestionForm() {
           Get Suggestion
         </Button>
       </form>
-       {state?.wipeMethod && (
+       {(state as any)?.wipeMethod && (
         <Alert className="mt-4 border-teal-500 bg-teal-50 dark:bg-teal-900/20">
           <Info className="h-4 w-4 text-teal-600" />
-          <AlertTitle className="text-teal-800 dark:text-teal-300">AI Recommendation: {state.wipeMethod}</AlertTitle>
-          <AlertDescription className="text-teal-700 dark:text-teal-400">{state.reasoning}</AlertDescription>
+          <AlertTitle className="text-teal-800 dark:text-teal-300">AI Recommendation: {(state as any).wipeMethod}</AlertTitle>
+          <AlertDescription className="text-teal-700 dark:text-teal-400">{(state as any).reasoning}</AlertDescription>
         </Alert>
       )}
     </Form>

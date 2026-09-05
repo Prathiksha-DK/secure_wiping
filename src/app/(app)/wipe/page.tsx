@@ -35,6 +35,8 @@ import {
   CornerDownRight,
   ExternalLink,
   Layers,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -263,13 +265,18 @@ function getFinalStateConfig(state: FinalState) {
   }
 }
 
-function getRecoveryBadge(cls: RecoveryClassification) {
+function getRecoveryBadge(cls: RecoveryClassification | string | undefined | null) {
   switch (cls) {
     case "NO_RECOVERABLE_DATA_DETECTED":
+    case "NO_EVIDENCE":
       return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">✓ No Recoverable Data</Badge>;
+    case "LOW_CONFIDENCE_TRACE":
+      return <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">✓ No Valid Structure (Noise)</Badge>;
     case "PARTIAL_DATA_RECOVERED":
+    case "PROBABLE_RECOVERABLE_ARTIFACT":
       return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">⚠ Partial Data Recovered</Badge>;
     case "SIGNIFICANT_DATA_RECOVERED":
+    case "VALIDATED_RECOVERABLE_ARTIFACT":
       return <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">✗ Significant Data Recovered</Badge>;
     case "RECOVERY_TEST_FAILED":
       return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">! Recovery Test Failed</Badge>;
@@ -367,11 +374,14 @@ function WipePageComponent() {
   const [browserMode, setBrowserMode] = useState<"file" | "folder">("file");
   const [browserCurrentPath, setBrowserCurrentPath] = useState("");
   const [browserParentPath, setBrowserParentPath] = useState<string | null>(null);
+  const [browserBreadcrumbs, setBrowserBreadcrumbs] = useState<{ name: string; path: string }[]>([]);
   const [browserItems, setBrowserItems] = useState<FsItem[]>([]);
   const [browserRoots, setBrowserRoots] = useState<FsRoot[]>([]);
   const [browserLoading, setBrowserLoading] = useState(false);
   const [browserSearch, setBrowserSearch] = useState("");
+  const [browserShowHidden, setBrowserShowHidden] = useState(false);
   const [browserSelectedFile, setBrowserSelectedFile] = useState<string>("");
+  const [pathInputValue, setPathInputValue] = useState("");
   const [nativePickerLoading, setNativePickerLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -433,17 +443,29 @@ function WipePageComponent() {
   // File & Folder Explorer functions
   // ---------------------------------------------------------------------------
 
-  const loadDirectory = async (path: string = "") => {
+  const loadDirectory = async (path: string = "", showHidden: boolean = browserShowHidden) => {
     setBrowserLoading(true);
     try {
-      const url = path ? `${API_BASE}/api/fs/browse?path=${encodeURIComponent(path)}` : `${API_BASE}/api/fs/browse`;
+      const params = new URLSearchParams();
+      if (path) params.set("path", path);
+      if (showHidden) params.set("show_hidden", "true");
+      const url = `${API_BASE}/api/fs/browse?${params.toString()}`;
       const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setBrowserCurrentPath(data.current_path);
+        setPathInputValue(data.current_path);
         setBrowserParentPath(data.parent_path);
+        setBrowserBreadcrumbs(data.breadcrumbs || []);
         setBrowserItems(data.items || []);
         setBrowserSelectedFile("");
+      } else {
+        const err = await res.json();
+        toast({
+          variant: "destructive",
+          title: "Directory access error",
+          description: err.error || "Failed to open directory",
+        });
       }
     } catch (e: any) {
       toast({
@@ -456,7 +478,7 @@ function WipePageComponent() {
     }
   };
 
-  const openExplorer = async (mode: "file" | "folder") => {
+  const openExplorer = async (mode: "file" | "folder", targetDir?: string) => {
     setBrowserMode(mode);
     setBrowserSearch("");
     setBrowserOpen(true);
@@ -473,7 +495,7 @@ function WipePageComponent() {
     }
 
     // Load initial directory
-    const startPath = targetPath ? (targetPath.includes("/") || targetPath.includes("\\") ? targetPath : "") : "";
+    const startPath = targetDir || (targetPath && (targetPath.includes("/") || targetPath.includes("\\")) ? targetPath : "");
     await loadDirectory(startPath);
   };
 
@@ -541,6 +563,29 @@ function WipePageComponent() {
     return m ? parseInt(m[1]) : null;
   }, []);
 
+  function getAuthHeaders(): HeadersInit {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (typeof document !== "undefined") {
+      const matchToken = document.cookie.match(/(?:^|; )session_token=([^;]*)/);
+      if (matchToken) {
+        headers["Authorization"] = `Bearer ${decodeURIComponent(matchToken[1])}`;
+      } else {
+        const matchSession = document.cookie.match(/(?:^|; )session=([^;]*)/);
+        if (matchSession) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(matchSession[1]));
+            if (parsed.token) {
+              headers["Authorization"] = `Bearer ${parsed.token}`;
+            }
+          } catch {}
+        }
+      }
+    }
+    return headers;
+  }
+
   // ---------------------------------------------------------------------------
   // Start Sanitization
   // ---------------------------------------------------------------------------
@@ -560,7 +605,8 @@ function WipePageComponent() {
     try {
       const res = await fetch(`${API_BASE}/api/sanitization/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           target: effectiveTarget,
           method: selectedMethod,
@@ -580,7 +626,11 @@ function WipePageComponent() {
 
       const timer = setInterval(async () => {
         try {
-          const statusRes = await fetch(`${API_BASE}/api/sanitization/status/${sid}`, { cache: "no-store" });
+          const statusRes = await fetch(`${API_BASE}/api/sanitization/status/${sid}`, {
+            cache: "no-store",
+            headers: getAuthHeaders(),
+            credentials: "include",
+          });
           if (!statusRes.ok) return;
           const statusData = await statusRes.json();
 
@@ -747,16 +797,23 @@ function WipePageComponent() {
               <div className="space-y-1.5 pt-1">
                 <p className="text-xs text-muted-foreground">Quick Locations:</p>
                 <div className="flex flex-wrap gap-2">
-                  {["Desktop", "Documents", "Downloads", "/tmp"].map((loc) => (
+                  {[
+                    { name: "🏠 Home", path: "/home/madhan" },
+                    { name: "🖥️ Desktop", path: "/home/madhan/Desktop" },
+                    { name: "📁 Documents", path: "/home/madhan/Documents" },
+                    { name: "📥 Downloads", path: "/home/madhan/Downloads" },
+                    { name: "🗂️ Root (/)", path: "/" },
+                    { name: "⚡ Temp (/tmp)", path: "/tmp" },
+                  ].map((loc) => (
                     <Button
-                      key={loc}
+                      key={loc.name}
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs px-2.5 bg-background border"
-                      onClick={() => openExplorer("file")}
+                      className="h-7 text-xs px-2.5 bg-background border hover:border-primary/50 hover:text-primary transition"
+                      onClick={() => openExplorer("file", loc.path)}
                     >
-                      <Folder className="h-3 w-3 mr-1 text-muted-foreground" /> {loc}
+                      {loc.name}
                     </Button>
                   ))}
                 </div>
@@ -804,6 +861,32 @@ function WipePageComponent() {
                   onChange={(e) => setTargetPath(e.target.value)}
                   className="font-mono text-xs pl-3"
                 />
+              </div>
+
+              {/* Quick Preset Folders */}
+              <div className="space-y-1.5 pt-1">
+                <p className="text-xs text-muted-foreground">Quick Folders:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { name: "🏠 Home", path: "/home/madhan" },
+                    { name: "🖥️ Desktop", path: "/home/madhan/Desktop" },
+                    { name: "📁 Documents", path: "/home/madhan/Documents" },
+                    { name: "📥 Downloads", path: "/home/madhan/Downloads" },
+                    { name: "🗂️ Root (/)", path: "/" },
+                    { name: "⚡ Temp (/tmp)", path: "/tmp" },
+                  ].map((loc) => (
+                    <Button
+                      key={loc.name}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2.5 bg-background border hover:border-primary/50 hover:text-primary transition"
+                      onClick={() => openExplorer("folder", loc.path)}
+                    >
+                      {loc.name}
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               <p className="text-xs text-muted-foreground">
@@ -927,14 +1010,14 @@ function WipePageComponent() {
               {browserMode === "folder" ? "Browse & Select Folder" : "Browse & Select File"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Navigate your system storage to choose the {browserMode === "folder" ? "folder" : "file"} to sanitize.
+              Navigate your storage to choose the {browserMode === "folder" ? "folder" : "file"} to sanitize.
             </DialogDescription>
           </DialogHeader>
 
           {/* Quick Roots Bar */}
-          <div className="px-4 py-2 bg-muted/40 border-b flex items-center gap-2 overflow-x-auto text-xs">
-            <span className="text-muted-foreground flex items-center gap-1 flex-shrink-0 font-medium">
-              <Home className="h-3 w-3" /> Quick:
+          <div className="px-4 py-2 bg-muted/40 border-b flex items-center gap-1.5 overflow-x-auto text-xs">
+            <span className="text-muted-foreground flex items-center gap-1 flex-shrink-0 font-medium text-[11px]">
+              <Home className="h-3.5 w-3.5 text-primary" /> Quick:
             </span>
             {browserRoots.map((root) => (
               <Button
@@ -942,7 +1025,7 @@ function WipePageComponent() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[11px] bg-background border flex-shrink-0"
+                className="h-6 px-2 text-[11px] bg-background border hover:border-primary/50 hover:text-primary transition flex-shrink-0"
                 onClick={() => loadDirectory(root.path)}
               >
                 {root.name}
@@ -950,28 +1033,86 @@ function WipePageComponent() {
             ))}
           </div>
 
-          {/* Breadcrumb Path Bar & Up Button */}
+          {/* Clickable Breadcrumbs Navigation */}
+          <div className="px-4 py-1.5 flex items-center gap-1 border-b bg-muted/20 overflow-x-auto text-xs">
+            <span className="text-muted-foreground font-semibold text-[10px] uppercase tracking-wider flex-shrink-0">Location:</span>
+            {browserBreadcrumbs.length > 0 ? (
+              browserBreadcrumbs.map((bc, idx) => (
+                <React.Fragment key={bc.path}>
+                  <button
+                    type="button"
+                    onClick={() => loadDirectory(bc.path)}
+                    className={`font-mono text-xs px-1.5 py-0.5 rounded hover:bg-muted hover:text-primary transition flex-shrink-0 ${
+                      idx === browserBreadcrumbs.length - 1 ? "font-bold text-primary bg-primary/10" : "text-muted-foreground"
+                    }`}
+                  >
+                    {bc.name === "/" ? "Root (/)" : bc.name}
+                  </button>
+                  {idx < browserBreadcrumbs.length - 1 && <span className="text-muted-foreground/40 font-mono">/</span>}
+                </React.Fragment>
+              ))
+            ) : (
+              <span className="font-mono text-xs text-muted-foreground">{browserCurrentPath || "/"}</span>
+            )}
+          </div>
+
+          {/* Path Entry Bar, Up Button, Hidden Toggle & Filter */}
           <div className="px-4 py-2 flex items-center gap-2 border-b bg-background">
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-7 w-7 flex-shrink-0"
+              className="h-8 w-8 flex-shrink-0"
+              title="Go to Parent Folder"
               disabled={!browserParentPath || browserLoading}
               onClick={() => browserParentPath && loadDirectory(browserParentPath)}
             >
-              <ArrowUp className="h-3.5 w-3.5" />
+              <ArrowUp className="h-4 w-4" />
             </Button>
-            <div className="flex-1 font-mono text-xs bg-muted/50 px-2.5 py-1.5 rounded border truncate">
-              {browserCurrentPath || "/"}
-            </div>
-            <div className="relative w-40 flex-shrink-0">
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (pathInputValue.trim()) {
+                  loadDirectory(pathInputValue.trim());
+                }
+              }}
+              className="flex-1 flex gap-1.5 items-center"
+            >
+              <Input
+                value={pathInputValue}
+                onChange={(e) => setPathInputValue(e.target.value)}
+                placeholder="Enter path (e.g. /home/madhan, /, /tmp)..."
+                className="h-8 text-xs font-mono"
+              />
+              <Button type="submit" size="sm" variant="secondary" className="h-8 px-2.5 text-xs">
+                Go
+              </Button>
+            </form>
+
+            <Button
+              type="button"
+              variant={browserShowHidden ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 text-xs px-2 gap-1 border flex-shrink-0"
+              title={browserShowHidden ? "Hide hidden files" : "Show hidden files"}
+              onClick={() => {
+                const next = !browserShowHidden;
+                setBrowserShowHidden(next);
+                loadDirectory(browserCurrentPath, next);
+              }}
+            >
+              {browserShowHidden ? <EyeOff className="h-3.5 w-3.5 text-primary" /> : <Eye className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline text-[11px]">{browserShowHidden ? "Dotfiles On" : "Dotfiles Off"}</span>
+            </Button>
+
+            <div className="relative w-36 flex-shrink-0">
               <Search className="h-3 w-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Filter items..."
+                placeholder="Filter..."
                 value={browserSearch}
                 onChange={(e) => setBrowserSearch(e.target.value)}
-                className="h-7 text-xs pl-7"
+                className="h-8 text-xs pl-7"
               />
             </div>
           </div>
@@ -1286,7 +1427,7 @@ function WipePageComponent() {
                       <div className="flex items-center gap-3">
                         <Badge variant="outline">Iteration {iter.iteration}</Badge>
                         <span className="font-normal">{iter.sanitization?.label}</span>
-                        {iter.recovery_assessment && getRecoveryBadge(iter.recovery_assessment.classification)}
+                        {iter.recovery_assessment && getRecoveryBadge((iter.recovery_assessment as any).classification || (iter.recovery_assessment as any).evidence_level)}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
@@ -1324,8 +1465,8 @@ function WipePageComponent() {
                           <p className="font-semibold flex items-center gap-1">
                             <Search className="h-3.5 w-3.5 text-blue-600" /> Recovery Assessment
                           </p>
-                          {getRecoveryBadge(iter.recovery_assessment?.classification || null)}
-                          <p className="text-muted-foreground">{iter.recovery_assessment?.detail}</p>
+                          {getRecoveryBadge((iter.recovery_assessment as any)?.classification || (iter.recovery_assessment as any)?.evidence_level || null)}
+                          <p className="text-muted-foreground">{(iter.recovery_assessment as any)?.detail || (iter.recovery_assessment as any)?.summary_reason}</p>
                         </div>
                       </div>
 

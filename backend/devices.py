@@ -21,18 +21,44 @@ def human_readable_size(num_bytes: Any) -> str:
 
 
 def _windows_list_devices() -> List[Dict[str, Any]]:
-    """Enumerate physical disks on Windows using PowerShell."""
+    """Enumerate physical disks on Windows using PowerShell with accurate system disk detection."""
     try:
         ps_script = r"""
 $ErrorActionPreference = 'Stop'
+$sysDisks = @()
+try {
+    $sysParts = Get-Partition | Where-Object { $_.IsBoot -or $_.IsSystem -or $_.DriveLetter -eq 'C' }
+    if ($sysParts) {
+        $sysDisks = $sysParts | ForEach-Object { $_.DiskNumber } | Select-Object -Unique
+    }
+} catch {}
+
 $disks = Get-PhysicalDisk | Select-Object FriendlyName, MediaType, Size, HealthStatus, BusType, SerialNumber, DeviceId
-$disks | ConvertTo-Json -Depth 3
+$result = @()
+foreach ($d in $disks) {
+    $isSys = $false
+    if ($d.DeviceId -and ($sysDisks -contains [int]$d.DeviceId)) {
+        $isSys = $true
+    }
+    $result += @{
+        FriendlyName = $d.FriendlyName
+        MediaType = $d.MediaType
+        Size = $d.Size
+        HealthStatus = $d.HealthStatus
+        BusType = $d.BusType
+        SerialNumber = $d.SerialNumber
+        DeviceId = $d.DeviceId
+        IsSystem = $isSys
+    }
+}
+$result | ConvertTo-Json -Depth 3
 """
         completed = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_script],
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if completed.returncode != 0:
             return []
@@ -51,6 +77,7 @@ $disks | ConvertTo-Json -Depth 3
             size = d.get("Size")
             health_status = d.get("HealthStatus") or "Healthy"
             serial = d.get("SerialNumber") or ""
+            is_sys = bool(d.get("IsSystem", False))
 
             # Derive type
             dtype = "USB" if str(bus).upper() == "USB" else str(media_type)
@@ -75,7 +102,7 @@ $disks | ConvertTo-Json -Depth 3
                     "healthStatus": str(health_status),
                     "serial": str(serial).strip(),
                     "bus": str(bus),
-                    "isSystem": False,
+                    "isSystem": is_sys,
                 }
             )
         return devices
@@ -84,9 +111,10 @@ $disks | ConvertTo-Json -Depth 3
 
 
 def _has_system_mount(dev_dict: Dict[str, Any]) -> bool:
-    """Check if device or any child partition contains root/boot system mountpoints."""
+    """Check if device or any child partition contains root/boot/critical system mountpoints."""
+    critical_mounts = {"/", "/boot", "/boot/efi", "/etc", "/usr", "/var", "/home", "/opt", "/root"}
     mp = dev_dict.get("mountpoint")
-    if mp in ("/", "/boot", "/boot/efi", "/etc", "/usr", "/var"):
+    if mp in critical_mounts:
         return True
     for child in dev_dict.get("children", []):
         if _has_system_mount(child):

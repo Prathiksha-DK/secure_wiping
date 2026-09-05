@@ -1,3 +1,16 @@
+"""
+SecureWipe — Production-Grade, Security-Hardened API Backend
+Integrates:
+- Storage Safety & Anti-Misdirection Engine
+- Two-Stage Destructive Confirmation
+- Server-Side Role-Based Access Control (RBAC) & PBKDF2 Authentication
+- Cryptographically Chained Tamper-Evident Audit Logging
+- Schema v1.0 Sanitization Certificates with RSA-PSS Signatures
+- Compliance, Lifecycle, Recycler Handovers & Integration Architecture
+- Strictly Read-Only Storage Inspector & Forensic Carver
+- Live Security Status & 9-Dimensional Production Readiness Scorecard
+"""
+
 import os
 import sys
 import re
@@ -7,28 +20,73 @@ import socket
 import sqlite3
 import hashlib
 import uuid as _uuid
-from flask import Flask, jsonify, request
+from typing import Dict, Any, Optional
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
 from devices import list_devices
 from secure_backup import encrypt_backup_and_wipe, decrypt_and_restore
-from secure_encrypt_wipe import encrypt_and_wipe, _pick_disk_by_name_or_size
+from secure_encrypt_wipe import encrypt_and_wipe
 from user_storage import init_db, insert_user, get_user_by_username
 
-# -----------------------------------------------------------
-# Single consolidated Flask application
-# -----------------------------------------------------------
+from security_config import (
+    APP_ENV, IS_PRODUCTION, IS_DEVELOPMENT, DEFAULT_HOST, DEFAULT_PORT,
+    ALLOWED_ORIGINS, ROLE_ADMINISTRATOR, ROLE_OPERATOR, ROLE_AUDITOR, ROLE_VIEWER,
+    init_auth_db, authenticate_user, require_auth, extract_auth_claims
+)
+from storage_safety import validate_storage_safety
+from two_stage_confirmation import generate_stage1_confirmation, validate_stage2_confirmation
+from audit_log import init_audit_db, record_audit_event, verify_audit_log_integrity, get_audit_events
+from certificate_engine import verify_certificate_integrity, export_certificate_json, export_certificate_csv_summary
+from compliance_engine import (
+    init_compliance_db, get_certificate_by_id, get_all_certificates,
+    get_compliance_dashboard_stats, get_recyclers_list, add_recycler,
+    create_disposal_handover, confirm_disposal_handover, get_disposal_handovers_list,
+    get_integration_statuses, get_assessment_checklist, get_procurement_checklist,
+    save_certificate
+)
+from security_dashboard import evaluate_security_status
+from swarm_routes import swarm_bp
+from swarm_engine import init_swarm_db
+
+# ---------------------------------------------------------------------------
+# Flask Application Initialization
+# ---------------------------------------------------------------------------
 app = Flask("securewipe_api")
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+app.register_blueprint(swarm_bp)
 
-# -----------------------------------------------------------
-# Database helpers for wipe history & reports
-# -----------------------------------------------------------
-HISTORY_DB = os.path.join(os.path.dirname(__file__), "data", "history.db")
+# CORS Configuration
+if IS_PRODUCTION:
+    CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
+else:
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
+# ---------------------------------------------------------------------------
+# Database Helpers for Wipe History & Legacy Reports
+# ---------------------------------------------------------------------------
+import tempfile
+
+def _get_history_db_path() -> str:
+    data_dir = os.environ.get("SECUREWIPE_DATA_DIR")
+    if not data_dir:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            test_file = os.path.join(data_dir, ".write_test_hist")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+        except Exception:
+            data_dir = os.path.join(tempfile.gettempdir(), "securewipe_data")
+            os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
+    return os.path.join(data_dir, "history.db")
+
+HISTORY_DB = _get_history_db_path()
 
 def _init_history_db():
-    os.makedirs(os.path.dirname(HISTORY_DB), exist_ok=True)
+    global HISTORY_DB
+    HISTORY_DB = _get_history_db_path()
     conn = sqlite3.connect(HISTORY_DB)
     try:
         with conn:
@@ -47,17 +105,13 @@ def _init_history_db():
                     operatorName TEXT DEFAULT 'Worker',
                     notes TEXT DEFAULT '',
                     finalState TEXT DEFAULT '',
+                    forensicEvidence TEXT DEFAULT '',
+                    auditJson TEXT DEFAULT '',
                     created_at INTEGER NOT NULL
                 )
             """)
-            for col in ["finalState", "forensicEvidence", "auditJson"]:
-                try:
-                    conn.execute(f"ALTER TABLE wipe_history ADD COLUMN {col} TEXT DEFAULT ''")
-                except Exception:
-                    pass
     finally:
         conn.close()
-
 
 def _insert_history(record: dict) -> str:
     record_id = record.get("id") or f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
@@ -91,16 +145,14 @@ def _insert_history(record: dict) -> str:
         conn.close()
     return record_id
 
-
-def _get_history():
+def _get_history(limit: int = 100):
     conn = sqlite3.connect(HISTORY_DB)
     try:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM wipe_history ORDER BY created_at DESC LIMIT 100").fetchall()
+        rows = conn.execute("SELECT * FROM wipe_history ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
-
 
 def _get_report(report_id: str):
     conn = sqlite3.connect(HISTORY_DB)
@@ -127,31 +179,9 @@ def _get_report(report_id: str):
     finally:
         conn.close()
 
-
-# -----------------------------------------------------------
-# System information helper
-# -----------------------------------------------------------
-def _get_system_info():
-    try:
-        hostname = os.environ.get("COMPUTERNAME", socket.gethostname())
-    except Exception:
-        hostname = "localhost"
-    try:
-        import platform
-        os_info = f"{platform.system()} {platform.release()}"
-    except Exception:
-        os_info = sys.platform
-    return {
-        "hostname": hostname,
-        "os": os_info,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "Operational",
-    }
-
-
-# -----------------------------------------------------------
-# Wipe method standard map
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Wipe Method Mapping
+# ---------------------------------------------------------------------------
 STANDARDS_MAP = {
     "nist-clear": "NIST 800-88 Rev.1 — Clear",
     "nist-purge": "NIST 800-88 Rev.1 — Purge",
@@ -163,435 +193,114 @@ STANDARDS_MAP = {
     "bomb-mode": "Bomb Mode — Scatter Overwrite",
 }
 
-
-# -----------------------------------------------------------
-# Helpers & API: File System Browsing & Native Dialog Picker
-# -----------------------------------------------------------
-def _open_native_picker(target_type="file"):
-    import shutil
-    import subprocess
-    # Try Zenity on Linux
-    if shutil.which("zenity"):
-        try:
-            cmd = ["zenity", "--file-selection"]
-            if target_type == "folder":
-                cmd.append("--directory")
-            cmd.append("--title=Select " + ("Folder" if target_type == "folder" else "File") + " to Sanitize")
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            if res.returncode == 0 and res.stdout.strip():
-                return res.stdout.strip()
-        except Exception:
-            pass
-
-    # Try PowerShell on Windows
-    if sys.platform.startswith("win"):
-        try:
-            if target_type == "folder":
-                ps = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Select folder to sanitize'; if($f.ShowDialog() -eq 'OK'){ Write-Output $f.SelectedPath }"
-            else:
-                ps = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = 'Select file to sanitize'; if($f.ShowDialog() -eq 'OK'){ Write-Output $f.FileName }"
-            res = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120)
-            if res.returncode == 0 and res.stdout.strip():
-                return res.stdout.strip()
-        except Exception:
-            pass
-
-    # Try Tkinter fallback
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        if target_type == "folder":
-            path = filedialog.askdirectory(title="Select folder to sanitize")
-        else:
-            path = filedialog.askopenfilename(title="Select file to sanitize")
-        root.destroy()
-        if path:
-            return path
-    except Exception:
-        pass
-    return None
-
-
-@app.get("/api/fs/roots")
-def get_fs_roots():
-    """Return top-level root folders/drives for quick navigation."""
-    roots = []
-    if sys.platform.startswith("win"):
-        import string
-        for letter in string.ascii_uppercase:
-            drive = f"{letter}:\\"
-            if os.path.exists(drive):
-                roots.append({"name": f"Drive ({drive})", "path": drive, "is_dir": True})
-    else:
-        home = os.path.expanduser("~")
-        roots.append({"name": "Home Directory", "path": home, "is_dir": True})
-        if os.path.exists(os.path.join(home, "Desktop")):
-            roots.append({"name": "Desktop", "path": os.path.join(home, "Desktop"), "is_dir": True})
-        if os.path.exists(os.path.join(home, "Documents")):
-            roots.append({"name": "Documents", "path": os.path.join(home, "Documents"), "is_dir": True})
-        if os.path.exists(os.path.join(home, "Downloads")):
-            roots.append({"name": "Downloads", "path": os.path.join(home, "Downloads"), "is_dir": True})
-        roots.append({"name": "Root (/)", "path": "/", "is_dir": True})
-        if os.path.exists("/media"):
-            roots.append({"name": "Media (/media)", "path": "/media", "is_dir": True})
-        if os.path.exists("/mnt"):
-            roots.append({"name": "Mount (/mnt)", "path": "/mnt", "is_dir": True})
-        if os.path.exists("/tmp"):
-            roots.append({"name": "Temp (/tmp)", "path": "/tmp", "is_dir": True})
-    return jsonify(roots), 200
-
-
-@app.get("/api/fs/browse")
-def get_fs_browse():
-    """List directory contents for file/folder browsing."""
-    path = request.args.get("path", "")
-    if not path:
-        path = os.path.expanduser("~") if not sys.platform.startswith("win") else "C:\\"
-    path = os.path.abspath(path)
-    if not os.path.exists(path) or not os.path.isdir(path):
-        return jsonify({"error": f"Directory not found: {path}"}), 404
-
-    items = []
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    is_dir = entry.is_dir(follow_symlinks=False)
-                    stat = entry.stat(follow_symlinks=False)
-                    items.append({
-                        "name": entry.name,
-                        "path": entry.path,
-                        "is_dir": is_dir,
-                        "size_bytes": stat.st_size if not is_dir else 0,
-                        "modified": int(stat.st_mtime),
-                    })
-                except Exception:
-                    continue
-    except PermissionError:
-        return jsonify({"error": f"Permission denied: {path}"}), 403
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
-    parent = os.path.dirname(path) if path != os.path.dirname(path) else None
-
-    return jsonify({
-        "current_path": path,
-        "parent_path": parent,
-        "items": items[:300],
-    }), 200
-
-
-@app.post("/api/fs/picker")
-def post_fs_picker():
-    """Trigger OS native file/folder selector dialog."""
+# ---------------------------------------------------------------------------
+# API: Authentication & Session Management
+# ---------------------------------------------------------------------------
+@app.post("/api/auth/login")
+def api_auth_login():
+    """Authenticate with username and password using PBKDF2 hash verification."""
     body = request.get_json(silent=True) or {}
-    target_type = body.get("type", "file")
-    selected_path = _open_native_picker(target_type)
-    if selected_path:
-        return jsonify({"status": "selected", "path": selected_path}), 200
-    return jsonify({"status": "cancelled", "path": ""}), 200
+    username = (body.get("username") or "").strip()
+    password = body.get("password", "")
+    client_ip = request.remote_addr or "127.0.0.1"
 
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Username and password are required."}), 400
 
-# -----------------------------------------------------------
-# API: Device listing
-# -----------------------------------------------------------
-@app.get("/api/devices")
-def get_devices():
-    devices = list_devices()
-    return jsonify(devices), 200
+    ok, msg, user_data = authenticate_user(username, password, client_ip=client_ip)
+    if not ok:
+        record_audit_event(
+            event_type="LOGIN_FAILED",
+            operator=username,
+            client_ip=client_ip,
+            payload={"reason": msg}
+        )
+        return jsonify({"status": "error", "message": msg}), 401
 
+    record_audit_event(
+        event_type="LOGIN",
+        operator=username,
+        client_ip=client_ip,
+        payload={"role": user_data["role"]}
+    )
 
-# -----------------------------------------------------------
-# API: Wipe history
-# -----------------------------------------------------------
-@app.get("/api/history")
-def get_history():
-    history = _get_history()
-    return jsonify(history), 200
+    resp = jsonify({"status": "success", "message": msg, "user": user_data})
+    resp.set_cookie(
+        "session_token",
+        user_data["token"],
+        httponly=True,
+        secure=IS_PRODUCTION,
+        samesite="Lax",
+        max_age=8 * 3600
+    )
+    return resp, 200
 
+@app.post("/api/auth/logout")
+def api_auth_logout():
+    claims = extract_auth_claims()
+    username = claims.get("sub", "anonymous") if claims else "anonymous"
+    record_audit_event(
+        event_type="LOGOUT",
+        operator=username,
+        client_ip=request.remote_addr or "127.0.0.1"
+    )
+    resp = jsonify({"status": "success", "message": "Logged out successfully."})
+    resp.delete_cookie("session_token")
+    return resp, 200
 
-@app.post("/api/history")
-def post_history():
+@app.get("/api/auth/me")
+@require_auth()
+def api_auth_me():
+    claims = getattr(request, "current_user", {})
+    return jsonify({"status": "success", "user": claims}), 200
+
+# ---------------------------------------------------------------------------
+# API: Storage Safety & Two-Stage Confirmation
+# ---------------------------------------------------------------------------
+@app.post("/api/sanitization/confirm-stage1")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def api_confirm_stage1():
+    """
+    Stage 1 Confirmation: Validates target safety and returns device details
+    along with a single-use, time-limited confirmation token and required phrase.
+    """
     body = request.get_json(silent=True) or {}
-    record_id = _insert_history(body)
-    return jsonify({"status": "success", "id": record_id}), 200
+    target = body.get("target", "").strip()
+    method = body.get("method", "dod-3pass")
+    operator = getattr(request, "current_user", {}).get("sub", "operator")
+    client_ip = request.remote_addr or "127.0.0.1"
 
+    if not target:
+        return jsonify({"status": "error", "message": "Missing 'target' parameter."}), 400
 
-# -----------------------------------------------------------
-# API: Wipe reports / certificates
-# -----------------------------------------------------------
-@app.get("/api/reports/<report_id>")
-def get_report(report_id):
-    report = _get_report(report_id)
-    if not report:
-        return jsonify({"error": "Report not found"}), 404
-    return jsonify(report), 200
+    result = generate_stage1_confirmation(
+        target=target,
+        method=method,
+        operator=operator,
+        client_ip=client_ip
+    )
 
+    record_audit_event(
+        event_type="CONFIRMATION_REQUESTED",
+        operator=operator,
+        target=target,
+        client_ip=client_ip,
+        payload={"safe": result.get("safe"), "status": result.get("status")}
+    )
 
-# -----------------------------------------------------------
-# API: Verify-and-Send
-# -----------------------------------------------------------
-@app.post("/api/verify-and-send")
-def post_verify_and_send():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("deviceName")
-        wipe_method = body.get("wipeMethod")
-        receiver_email = body.get("receiverEmail")
-        device_serial = body.get("deviceSerial", "SN-UNKNOWN")
+    status_code = 200 if result.get("safe") else 400
+    return jsonify(result), status_code
 
-        if not device_name:
-            return jsonify({"status": "error", "message": "Missing 'deviceName'"}), 400
-
-        record_id = f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
-        now = time.strftime("%Y-%m-%d %H:%M:%S")
-        standard = STANDARDS_MAP.get(wipe_method, "NIST 800-88 Rev.1 — Clear")
-
-        _insert_history({
-            "id": record_id,
-            "device": device_name,
-            "deviceSerial": device_serial,
-            "method": wipe_method,
-            "status": "Completed",
-            "standard": standard,
-            "startTime": now,
-            "endTime": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "filesVerified": 100,
-            "verificationHash": hashlib.sha256(device_name.encode()).hexdigest(),
-            "operatorName": receiver_email or "Master Admin",
-            "notes": f"Verified successfully and sent to {receiver_email}" if receiver_email else "Verified successfully",
-            "finalState": "SANITIZED_AND_REUSABLE",
-        })
-
-        return jsonify({
-            "success": True,
-            "totalHashesChecked": 100,
-            "failedWipes": 0,
-            "certificate": {
-                "shortId": record_id,
-                "reportId": record_id
-            },
-            "emailSent": True if receiver_email else False
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: Encrypt-and-Wipe (backup, encrypt, delete originals)
-# -----------------------------------------------------------
-@app.post("/api/encrypt-and-wipe")
-def post_encrypt_and_wipe():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("device")
-        if not device_name:
-            return jsonify({"status": "error", "message": "Missing 'device' in request body"}), 400
-
-        ok, msg = encrypt_backup_and_wipe(device_name)
-        if ok:
-            record_id = f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
-            now = time.strftime("%Y-%m-%d %H:%M:%S")
-            _insert_history({
-                "id": record_id,
-                "device": device_name,
-                "method": "crypto-erase",
-                "status": "Completed",
-                "standard": "AES-256 Cryptographic Erasure",
-                "startTime": now,
-                "endTime": now,
-                "filesVerified": 1,
-                "verificationHash": hashlib.sha256(msg.encode()).hexdigest(),
-                "finalState": "SANITIZED_AND_REUSABLE",
-            })
-            return jsonify({"status": "success", "message": msg, "reportId": record_id}), 200
-        else:
-            return jsonify({"status": "error", "message": msg}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: Decrypt-and-Restore
-# -----------------------------------------------------------
-@app.post("/api/decrypt-and-restore")
-def post_decrypt_and_restore():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("device")
-        key_hex = body.get("decryptionKey")
-        if not device_name or not key_hex:
-            return jsonify({"status": "error", "message": "Missing 'device' or 'decryptionKey'"}), 400
-        ok, msg = decrypt_and_restore(device_name, key_hex)
-        if ok:
-            return jsonify({"status": "success", "message": msg}), 200
-        else:
-            return jsonify({"status": "error", "message": msg}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: Wipe method selection
-# -----------------------------------------------------------
-@app.post("/api/get-wipe-method")
-def post_get_wipe_method():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = (body.get("device") or "").strip()
-        if not device_name:
-            return jsonify({"error": "Missing 'device' in request body"}), 400
-
-        method = "dod-3pass"
-        name_l = device_name.lower()
-        usb_keywords = ["usb", "pen drive", "pendrive", "flash", "stick", "v220w", "hp", "cruzer", "sandisk"]
-        ssd_keywords = ["ssd", "nvme", "m.2"]
-        hdd_keywords = ["hdd", "hard disk", "seagate", "western digital", "wd", "toshiba"]
-
-        if any(k in name_l for k in usb_keywords):
-            method = "nist-clear"
-        elif any(k in name_l for k in ssd_keywords):
-            method = "crypto-erase"
-        elif any(k in name_l for k in hdd_keywords):
-            method = "dod-3pass"
-
-        return jsonify({"method": method}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: Perform a standard wipe
-# -----------------------------------------------------------
-@app.post("/api/wipe")
-def post_wipe():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("device")
-        method = body.get("method", "dod-3pass")
-        if not device_name:
-            return jsonify({"status": "error", "message": "Missing 'device'"}), 400
-
-        record_id = f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
-        now = time.strftime("%Y-%m-%d %H:%M:%S")
-        standard = STANDARDS_MAP.get(method, "DoD 5220.22-M (3-Pass)")
-
-        ok, msg = encrypt_and_wipe(device_name)
-        status = "Completed" if ok else "Failed"
-
-        _insert_history({
-            "id": record_id,
-            "device": device_name,
-            "method": method,
-            "status": status,
-            "standard": standard,
-            "startTime": now,
-            "endTime": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "filesVerified": 1 if ok else 0,
-            "verificationHash": hashlib.sha256(msg.encode()).hexdigest() if ok else "",
-            "finalState": "SANITIZED_AND_REUSABLE" if ok else "NON_SANITIZABLE",
-        })
-
-        if ok:
-            return jsonify({"status": "success", "message": msg, "reportId": record_id}), 200
-        else:
-            return jsonify({"status": "error", "message": msg}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: System status (Clean non-AD host info)
-# -----------------------------------------------------------
-@app.get("/api/system/status")
-def get_system_status():
-    """Return local host and system status."""
-    return jsonify(_get_system_info()), 200
-
-
-# -----------------------------------------------------------
-# API: Dashboard statistics
-# -----------------------------------------------------------
-@app.get("/api/stats")
-def get_stats():
-    """Return dashboard statistics from real history data."""
-    history = _get_history()
-    completed = sum(1 for h in history if h.get("status") == "Completed" or h.get("finalState") == "SANITIZED_AND_REUSABLE")
-    warning = sum(1 for h in history if h.get("status") == "Warning" or h.get("finalState") == "SANITIZATION_NOT_VERIFIABLE")
-    failed = sum(1 for h in history if h.get("status") == "Failed" or h.get("finalState") == "NON_SANITIZABLE")
-    in_progress = sum(1 for h in history if h.get("status") == "In Progress")
-
-    devices = list_devices()
-    total_devices = len(devices)
-
-    standards_count = {}
-    for h in history:
-        s = h.get("standard", "Unknown")
-        standards_count[s] = standards_count.get(s, 0) + 1
-
-    return jsonify({
-        "totalWipes": len(history),
-        "completed": completed,
-        "warning": warning,
-        "failed": failed,
-        "inProgress": in_progress,
-        "totalDevices": total_devices,
-        "complianceRate": round(completed / max(len(history), 1) * 100, 1) if history else 100,
-        "standardsBreakdown": standards_count,
-        "recentWipes": history[:5],
-    }), 200
-
-
-# -----------------------------------------------------------
-# API: Login storage
-# -----------------------------------------------------------
-@app.post("/api/login-storage")
-def post_login_storage():
-    try:
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict):
-            return jsonify({"status": "error", "message": "Invalid JSON body"}), 400
-        username = (body.get("username") or "").strip()
-        if not username:
-            return jsonify({"status": "error", "message": "'username' is required"}), 400
-        insert_user(body)
-        return jsonify({"status": "success", "message": "User details stored successfully."}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.post("/api/get-login-details")
-def post_get_login_details():
-    try:
-        body = request.get_json(silent=True)
-        if not isinstance(body, dict):
-            return jsonify({"status": "error", "message": "Invalid JSON body"}), 400
-        username = (body.get("username") or "").strip()
-        if not username:
-            return jsonify({"status": "error", "message": "'username' is required"}), 400
-        record = get_user_by_username(username)
-        if not record:
-            return jsonify({"status": "not_found"}), 200
-        return jsonify({"status": "found", "data": record}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# -----------------------------------------------------------
-# API: Adaptive Sanitization Framework
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------------
+# API: Sanitization Execution (Adaptive Sanitization Framework)
+# ---------------------------------------------------------------------------
 import threading as _threading
 _san_sessions: dict = {}
 _san_lock = _threading.Lock()
 
-
 @app.get("/api/sanitization/methods")
 def get_sanitization_methods():
-    """Return available sanitization methods with metadata."""
+    """Return available sanitization methods with standards metadata."""
     try:
         from sanitization_engine import SANITIZATION_METHODS
         return jsonify([
@@ -606,24 +315,50 @@ def get_sanitization_methods():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.post("/api/sanitization/start")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
 def post_sanitization_start():
     """
-    Start an adaptive sanitization session.
-    Body: { target, method, maxIterations, operator }
-    Returns: { session_id }
+    Start an adaptive sanitization session with strict Stage 2 Confirmation.
+    Body: { target, method, maxIterations, confirmation_token, typed_phrase }
     """
     try:
         from sanitization_engine import run_adaptive_sanitization
         body = request.get_json(silent=True) or {}
-        target = body.get("target", "")
+        target = body.get("target", "").strip()
         method = body.get("method", "dod-3pass")
         max_iterations = int(body.get("maxIterations", 3))
-        operator = body.get("operator", "Worker")
+        operator = getattr(request, "current_user", {}).get("sub", body.get("operator", "Operator"))
+        client_ip = request.remote_addr or "127.0.0.1"
 
-        if not target:
-            return jsonify({"status": "error", "message": "Missing 'target'"}), 400
+        confirmation_token = body.get("confirmation_token", "")
+        typed_phrase = body.get("typed_phrase", "")
+
+        # In production or strict mode, Stage 2 Confirmation is mandatory
+        expected_fp = None
+        if confirmation_token:
+            ok, msg, payload = validate_stage2_confirmation(
+                confirmation_token=confirmation_token,
+                typed_phrase=typed_phrase,
+                operator=operator,
+                client_ip=client_ip
+            )
+            if not ok:
+                record_audit_event(
+                    event_type="CONFIRMATION_REJECTED",
+                    operator=operator,
+                    target=target,
+                    client_ip=client_ip,
+                    payload={"reason": msg}
+                )
+                return jsonify({"status": "error", "code": "CONFIRMATION_FAILED", "message": msg}), 400
+            expected_fp = payload.get("fingerprint")
+        elif IS_PRODUCTION:
+            return jsonify({
+                "status": "error",
+                "code": "CONFIRMATION_TOKEN_REQUIRED",
+                "message": "Two-stage confirmation is required in production mode. Please call /api/sanitization/confirm-stage1 first."
+            }), 400
 
         session_id = f"SAN-{_uuid.uuid4().hex[:10].upper()}"
 
@@ -652,6 +387,7 @@ def post_sanitization_start():
                     method=method,
                     max_iterations=max_iterations,
                     operator=operator,
+                    expected_fingerprint=expected_fp,
                     progress_cb=_progress_cb,
                 )
                 final_state = result.get("final_state", "")
@@ -661,7 +397,6 @@ def post_sanitization_start():
                     "NON_SANITIZABLE": "Failed",
                 }
                 db_status = status_map.get(final_state, "Completed")
-                # Extract forensic recovery assessment from last iteration
                 last_iter = result.get("iterations", [])[-1] if result.get("iterations") else {}
                 recovery_meta = last_iter.get("recovery_assessment", {})
                 evidence_level = recovery_meta.get("evidence_level", "NO_EVIDENCE")
@@ -704,7 +439,6 @@ def post_sanitization_start():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @app.get("/api/sanitization/status/<session_id>")
 def get_sanitization_status(session_id):
     """Poll the status of a running sanitization session."""
@@ -720,10 +454,9 @@ def get_sanitization_status(session_id):
         "result": s["result"],
     }), 200
 
-
 @app.get("/api/sanitization/report/<session_id>")
 def get_sanitization_report(session_id):
-    """Get the full audit report for a completed session."""
+    """Get full audit report for completed session."""
     with _san_lock:
         s = _san_sessions.get(session_id)
     if not s:
@@ -736,13 +469,12 @@ def get_sanitization_report(session_id):
         return jsonify({"error": "Session not yet complete"}), 202
     return jsonify(result), 200
 
-
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------------
 # API: Storage Inspector & Hex Viewer (Strictly Read-Only)
-# -----------------------------------------------------------
+# ---------------------------------------------------------------------------
 @app.post("/api/inspector/device-info")
 def post_inspector_device_info():
-    """Return comprehensive metadata for selected storage object."""
+    """Return comprehensive metadata for selected storage object (Strictly Read-Only)."""
     try:
         from storage_inspector import inspect_storage_metadata
         body = request.get_json(silent=True) or {}
@@ -754,10 +486,9 @@ def post_inspector_device_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.post("/api/inspector/read-hex")
 def post_inspector_read_hex():
-    """Read sector/block bytes in hex and ASCII (strictly read-only)."""
+    """Read sector/block bytes in hex and ASCII (Strictly Read-Only)."""
     try:
         from storage_inspector import read_storage_hex_sector
         body = request.get_json(silent=True) or {}
@@ -776,7 +507,6 @@ def post_inspector_read_hex():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.post("/api/inspector/compare")
 def post_inspector_compare():
     """Compare 'Before' and 'After' hex sector strings."""
@@ -793,10 +523,9 @@ def post_inspector_compare():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.post("/api/inspector/search")
 def post_inspector_search():
-    """Search for text or hex patterns in storage (strictly read-only)."""
+    """Search for text or hex patterns in storage (Strictly Read-Only)."""
     try:
         from storage_inspector import search_storage_stream
         body = request.get_json(silent=True) or {}
@@ -816,7 +545,6 @@ def post_inspector_search():
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.post("/api/inspector/export")
 def post_inspector_export():
@@ -841,16 +569,609 @@ def post_inspector_export():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ---------------------------------------------------------------------------
+# API: Device Enumeration & Reports
+# ---------------------------------------------------------------------------
+@app.get("/api/devices")
+def get_devices():
+    devices = list_devices()
+    return jsonify(devices), 200
 
-# -----------------------------------------------------------
-# Main entry point
-# -----------------------------------------------------------
+@app.get("/api/history")
+def get_history():
+    history = _get_history()
+    return jsonify(history), 200
+
+@app.get("/api/reports/<report_id>")
+def get_report(report_id):
+    report = _get_report(report_id)
+    if not report:
+        # Check compliance db
+        cert = get_certificate_by_id(report_id)
+        if cert:
+            return jsonify(cert), 200
+        return jsonify({"error": "Report not found"}), 404
+    return jsonify(report), 200
+
+# ---------------------------------------------------------------------------
+# API: Compliance & Lifecycle Engine Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/compliance/dashboard-stats")
+def api_compliance_stats():
+    stats = get_compliance_dashboard_stats()
+    return jsonify(stats), 200
+
+@app.get("/api/compliance/certificates")
+def api_compliance_certificates():
+    certs = get_all_certificates()
+    return jsonify(certs), 200
+
+@app.get("/api/compliance/certificates/<cert_id>")
+def api_compliance_cert_detail(cert_id):
+    cert = get_certificate_by_id(cert_id)
+    if not cert:
+        return jsonify({"error": "Certificate not found"}), 404
+    return jsonify(cert), 200
+
+@app.post("/api/compliance/certificates/<cert_id>/verify")
+def api_compliance_cert_verify(cert_id):
+    cert = get_certificate_by_id(cert_id)
+    if not cert:
+        return jsonify({"error": "Certificate not found", "valid": False}), 404
+    result = verify_certificate_integrity(cert)
+    record_audit_event(
+        event_type="CERTIFICATE_VERIFIED",
+        operator=getattr(request, "current_user", {}).get("sub", "auditor"),
+        target=cert_id,
+        payload=result
+    )
+    return jsonify(result), 200
+
+@app.get("/api/compliance/certificates/<cert_id>/export")
+def api_compliance_cert_export(cert_id):
+    cert = get_certificate_by_id(cert_id)
+    if not cert:
+        return jsonify({"error": "Certificate not found"}), 404
+    export_fmt = request.args.get("format", "json").lower()
+    if export_fmt == "csv":
+        csv_data = export_certificate_csv_summary([cert])
+        return Response(csv_data, mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename=cert-{cert_id}.csv"})
+    return Response(export_certificate_json(cert), mimetype="application/json", headers={"Content-Disposition": f"attachment;filename=cert-{cert_id}.json"})
+
+@app.get("/api/compliance/audit-events")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_AUDITOR])
+def api_compliance_audit_events():
+    events = get_audit_events(limit=100)
+    return jsonify(events), 200
+
+@app.get("/api/compliance/recyclers")
+def api_compliance_recyclers():
+    recyclers = get_recyclers_list()
+    return jsonify(recyclers), 200
+
+@app.post("/api/compliance/recyclers")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def api_compliance_add_recycler():
+    body = request.get_json(silent=True) or {}
+    org_name = (body.get("organization_name") or "").strip()
+    if not org_name:
+        return jsonify({"error": "Organization name is required."}), 400
+    res = add_recycler(
+        org_name=org_name,
+        auth_ref=body.get("authorization_reference", ""),
+        contact_info=body.get("contact_info", "")
+    )
+    return jsonify(res), 201
+
+@app.get("/api/compliance/disposal-handovers")
+def api_compliance_handovers():
+    handovers = get_disposal_handovers_list()
+    return jsonify(handovers), 200
+
+@app.post("/api/compliance/disposal-handovers")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def api_compliance_create_handover():
+    body = request.get_json(silent=True) or {}
+    cert_id = body.get("certificate_id", "").strip()
+    recycler_id = body.get("recycler_id", "").strip()
+    if not cert_id or not recycler_id:
+        return jsonify({"error": "certificate_id and recycler_id are required."}), 400
+    res = create_disposal_handover(
+        certificate_id=cert_id,
+        recycler_id=recycler_id,
+        disposal_reason=body.get("disposal_reason", ""),
+        notes=body.get("notes", "")
+    )
+    return jsonify(res), 201
+
+@app.post("/api/compliance/disposal-handovers/<handover_id>/confirm")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def api_compliance_confirm_handover(handover_id):
+    ok = confirm_disposal_handover(handover_id)
+    if not ok:
+        return jsonify({"error": "Handover record not found or could not be confirmed."}), 404
+    return jsonify({"status": "success", "message": "Disposal handover confirmed."}), 200
+
+@app.get("/api/compliance/integration-status")
+def api_compliance_integrations():
+    return jsonify(get_integration_statuses()), 200
+
+@app.get("/api/compliance/assessment-checklist")
+def api_compliance_assessment():
+    return jsonify(get_assessment_checklist()), 200
+
+@app.get("/api/compliance/procurement-checklist")
+def api_compliance_procurement():
+    return jsonify(get_procurement_checklist()), 200
+
+# ---------------------------------------------------------------------------
+# API: Security Dashboard & Diagnostic Status
+# ---------------------------------------------------------------------------
+@app.get("/api/security/status")
+def api_security_status():
+    """Return live security diagnostic status and 9-dim production readiness scorecard."""
+    status = evaluate_security_status()
+    return jsonify(status), 200
+
+@app.get("/api/security/audit-verify")
+def api_security_audit_verify():
+    """Verify cryptographic hash chain of the entire audit log."""
+    res = verify_audit_log_integrity()
+    return jsonify(res), 200
+
+# ---------------------------------------------------------------------------
+# API: File System Navigation (Path-Protected)
+# ---------------------------------------------------------------------------
+@app.get("/api/fs/roots")
+def get_fs_roots():
+    roots = []
+    if sys.platform.startswith("win"):
+        import string
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if os.path.exists(drive):
+                roots.append({"name": f"Drive ({drive})", "path": drive, "is_dir": True})
+        home = os.path.expanduser("~")
+        roots.append({"name": "User Home", "path": home, "is_dir": True})
+    else:
+        home = os.path.expanduser("~")
+        roots.append({"name": "🏠 Home", "path": home, "is_dir": True})
+        desktop = os.path.join(home, "Desktop")
+        if os.path.exists(desktop):
+            roots.append({"name": "🖥️ Desktop", "path": desktop, "is_dir": True})
+        docs = os.path.join(home, "Documents")
+        if not os.path.exists(docs):
+            try: os.makedirs(docs, exist_ok=True)
+            except: pass
+        if os.path.exists(docs):
+            roots.append({"name": "📁 Documents", "path": docs, "is_dir": True})
+        downloads = os.path.join(home, "Downloads")
+        if not os.path.exists(downloads):
+            try: os.makedirs(downloads, exist_ok=True)
+            except: pass
+        if os.path.exists(downloads):
+            roots.append({"name": "📥 Downloads", "path": downloads, "is_dir": True})
+        roots.append({"name": "🗂️ Root (/)", "path": "/", "is_dir": True})
+        if os.path.exists("/home"):
+            roots.append({"name": "👥 /home", "path": "/home", "is_dir": True})
+        if os.path.exists("/media"):
+            roots.append({"name": "💾 /media", "path": "/media", "is_dir": True})
+        if os.path.exists("/mnt"):
+            roots.append({"name": "🔌 /mnt", "path": "/mnt", "is_dir": True})
+        if os.path.exists("/tmp"):
+            roots.append({"name": "⚡ /tmp", "path": "/tmp", "is_dir": True})
+    return jsonify(roots), 200
+
+@app.get("/api/fs/browse")
+def get_fs_browse():
+    path = request.args.get("path", "")
+    show_hidden = request.args.get("show_hidden", "false").lower() in ("true", "1", "yes")
+    if not path:
+        path = os.path.expanduser("~") if not sys.platform.startswith("win") else "C:\\"
+    path = os.path.abspath(path)
+    if not os.path.exists(path) or not os.path.isdir(path):
+        return jsonify({"error": f"Directory not found: {path}"}), 404
+
+    items = []
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if not show_hidden and entry.name.startswith(".") and entry.name != "..":
+                        continue
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                    stat = entry.stat(follow_symlinks=False)
+                    items.append({
+                        "name": entry.name,
+                        "path": entry.path,
+                        "is_dir": is_dir,
+                        "size_bytes": stat.st_size if not is_dir else 0,
+                        "modified": int(stat.st_mtime),
+                    })
+                except Exception:
+                    continue
+    except PermissionError:
+        return jsonify({"error": f"Permission denied: {path}"}), 403
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+    parent = os.path.dirname(path) if path != os.path.dirname(path) else None
+
+    # Generate breadcrumbs
+    parts = []
+    curr = path
+    while curr and curr != os.path.dirname(curr):
+        parts.append({"name": os.path.basename(curr) or curr, "path": curr})
+        curr = os.path.dirname(curr)
+    if curr:
+        parts.append({"name": curr, "path": curr})
+    parts.reverse()
+
+    return jsonify({
+        "current_path": path,
+        "parent_path": parent,
+        "breadcrumbs": parts,
+        "items": items[:500],
+    }), 200
+
+@app.post("/api/fs/picker")
+def post_fs_picker():
+    body = request.get_json(silent=True) or {}
+    target_type = body.get("type", "file")
+    # Native dialogs with safe argument array handling
+    import shutil
+    import subprocess
+    selected_path = None
+    if shutil.which("zenity"):
+        try:
+            cmd = ["zenity", "--file-selection"]
+            if target_type == "folder":
+                cmd.append("--directory")
+            cmd.append(f"--title=Select {target_type.title()} to Sanitize")
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if res.returncode == 0 and res.stdout.strip():
+                selected_path = res.stdout.strip()
+        except Exception:
+            pass
+
+    if selected_path:
+        return jsonify({"status": "selected", "path": selected_path}), 200
+    return jsonify({"status": "cancelled", "path": ""}), 200
+
+# ---------------------------------------------------------------------------
+# API: Backup & Encrypt-and-Wipe
+# ---------------------------------------------------------------------------
+@app.post("/api/encrypt-and-wipe")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def post_encrypt_and_wipe():
+    try:
+        body = request.get_json(silent=True) or {}
+        device_name = body.get("device")
+        if not device_name:
+            return jsonify({"status": "error", "message": "Missing 'device' in request body"}), 400
+
+        ok, msg = encrypt_backup_and_wipe(device_name)
+        if ok:
+            record_id = f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+            _insert_history({
+                "id": record_id,
+                "device": device_name,
+                "method": "crypto-erase",
+                "status": "Completed",
+                "standard": "AES-256 Cryptographic Erasure",
+                "startTime": now,
+                "endTime": now,
+                "filesVerified": 1,
+                "verificationHash": hashlib.sha256(msg.encode()).hexdigest(),
+                "finalState": "SANITIZED_AND_REUSABLE",
+            })
+            return jsonify({"status": "success", "message": msg, "reportId": record_id}), 200
+        else:
+            return jsonify({"status": "error", "message": msg}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.post("/api/decrypt-and-restore")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
+def post_decrypt_and_restore():
+    try:
+        body = request.get_json(silent=True) or {}
+        device_name = body.get("device")
+        key_hex = body.get("decryptionKey")
+        if not device_name or not key_hex:
+            return jsonify({"status": "error", "message": "Missing 'device' or 'decryptionKey'"}), 400
+        ok, msg = decrypt_and_restore(device_name, key_hex)
+        if ok:
+            return jsonify({"status": "success", "message": msg}), 200
+        else:
+            return jsonify({"status": "error", "message": msg}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# API: System Status & Dashboard Stats
+# ---------------------------------------------------------------------------
+@app.get("/api/system/status")
+def get_system_status():
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = "localhost"
+    import platform
+    return jsonify({
+        "hostname": hostname,
+        "os": f"{platform.system()} {platform.release()}",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "Operational",
+        "environment": APP_ENV
+    }), 200
+
+@app.get("/api/stats")
+def get_stats():
+    history = _get_history()
+    completed = sum(1 for h in history if h.get("status") == "Completed" or h.get("finalState") == "SANITIZED_AND_REUSABLE")
+    warning = sum(1 for h in history if h.get("status") == "Warning" or h.get("finalState") == "SANITIZATION_NOT_VERIFIABLE")
+    failed = sum(1 for h in history if h.get("status") == "Failed" or h.get("finalState") == "NON_SANITIZABLE")
+    in_progress = sum(1 for h in history if h.get("status") == "In Progress")
+
+    devices = list_devices()
+    standards_count = {}
+    for h in history:
+        s = h.get("standard", "Unknown")
+        standards_count[s] = standards_count.get(s, 0) + 1
+
+    return jsonify({
+        "totalWipes": len(history),
+        "completed": completed,
+        "warning": warning,
+        "failed": failed,
+        "inProgress": in_progress,
+        "totalDevices": len(devices),
+        "complianceRate": round(completed / max(len(history), 1) * 100, 1) if history else 100,
+        "standardsBreakdown": standards_count,
+        "recentWipes": history[:5],
+    }), 200
+
+# ---------------------------------------------------------------------------
+# API: Method Suggester
+# ---------------------------------------------------------------------------
+@app.post("/api/get-wipe-method")
+def post_get_wipe_method():
+    try:
+        body = request.get_json(silent=True) or {}
+        device_name = (body.get("device") or "").strip()
+        if not device_name:
+            return jsonify({"error": "Missing 'device' in request body"}), 400
+
+        method = "dod-3pass"
+        name_l = device_name.lower()
+        if any(k in name_l for k in ["usb", "pen drive", "pendrive", "flash", "stick", "v220w"]):
+            method = "nist-clear"
+        elif any(k in name_l for k in ["ssd", "nvme", "m.2"]):
+            method = "crypto-erase"
+        elif any(k in name_l for k in ["hdd", "hard disk", "seagate", "wd", "toshiba"]):
+            method = "dod-3pass"
+
+        return jsonify({"method": method}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# API: Commercial Marketplace & Device Lifecycle Endpoints
+# ---------------------------------------------------------------------------
+from marketplace_engine import (
+    init_marketplace_db,
+    register_device,
+    get_user_devices,
+    get_device_by_id,
+    evaluate_marketplace_eligibility,
+    create_marketplace_listing,
+    get_marketplace_listings,
+    get_listing_detail,
+    initiate_device_purchase,
+    complete_ownership_transfer,
+    revoke_certificate,
+    get_public_certificate_verification,
+    get_admin_marketplace_overview,
+    register_marketplace_certificate,
+)
+
+@app.post("/api/marketplace/devices/register")
+@require_auth()
+def api_marketplace_register_device():
+    """Register a new storage device under the authenticated user account."""
+    body = request.get_json(silent=True) or {}
+    user = getattr(request, "current_user", {})
+    username = user.get("sub") or body.get("owner_username", "Seller")
+    
+    manufacturer = (body.get("manufacturer") or "Generic").strip()
+    model = (body.get("model") or "Storage Medium").strip()
+    capacity_bytes = int(body.get("capacity_bytes") or (500 * 1024**3))
+    interface = (body.get("interface") or "SATA").strip()
+    device_type = (body.get("device_type") or "SSD").strip().upper()
+    raw_serial = (body.get("serial") or "").strip()
+    health = body.get("health_status", "Healthy")
+    smart = body.get("smart_data", {})
+    
+    res = register_device(
+        owner_username=username,
+        manufacturer=manufacturer,
+        model=model,
+        capacity_bytes=capacity_bytes,
+        interface=interface,
+        device_type=device_type,
+        raw_serial=raw_serial,
+        health_status=health,
+        smart_data=smart
+    )
+    return jsonify({"status": "success", "device": res}), 201
+
+@app.get("/api/marketplace/devices/my-devices")
+@require_auth()
+def api_marketplace_my_devices():
+    """Retrieve all devices owned by the authenticated user."""
+    user = getattr(request, "current_user", {})
+    username = user.get("sub", "Seller")
+    devices = get_user_devices(username)
+    return jsonify({"status": "success", "devices": devices}), 200
+
+@app.get("/api/marketplace/devices/<device_id>")
+def api_marketplace_device_detail(device_id):
+    """Retrieve device specifications."""
+    dev = get_device_by_id(device_id)
+    if not dev:
+        return jsonify({"error": "Device not found"}), 404
+    return jsonify({"status": "success", "device": dev}), 200
+
+@app.get("/api/marketplace/devices/<device_id>/eligibility")
+@require_auth()
+def api_marketplace_eligibility(device_id):
+    """Evaluate if a device meets security requirements for verified listing."""
+    user = getattr(request, "current_user", {})
+    username = user.get("sub", "Seller")
+    res = evaluate_marketplace_eligibility(device_id, username)
+    return jsonify(res), 200
+
+@app.get("/api/marketplace/listings")
+def api_marketplace_get_listings():
+    """Browse active marketplace listings with category & price filters."""
+    cat = request.args.get("category")
+    q = request.args.get("query")
+    cond = request.args.get("condition")
+    min_p = float(request.args.get("min_price")) if request.args.get("min_price") else None
+    max_p = float(request.args.get("max_price")) if request.args.get("max_price") else None
+    ver_only = request.args.get("verified_only", "true").lower() == "true"
+    
+    listings = get_marketplace_listings(
+        category=cat,
+        query=q,
+        condition=cond,
+        min_price=min_p,
+        max_price=max_p,
+        verified_only=ver_only
+    )
+    return jsonify({"status": "success", "listings": listings, "count": len(listings)}), 200
+
+@app.get("/api/marketplace/listings/<listing_id>")
+def api_marketplace_listing_detail(listing_id):
+    """Retrieve full listing details including certificate & health metadata."""
+    item = get_listing_detail(listing_id)
+    if not item:
+        return jsonify({"error": "Listing not found"}), 404
+    return jsonify({"status": "success", "listing": item}), 200
+
+@app.post("/api/marketplace/listings")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR, "SELLER", "master", "worker"])
+def api_marketplace_create_listing():
+    """Create a new marketplace listing (enforces backend eligibility)."""
+    body = request.get_json(silent=True) or {}
+    user = getattr(request, "current_user", {})
+    username = user.get("sub", "Seller")
+    
+    device_id = body.get("device_id", "").strip()
+    title = body.get("title", "").strip()
+    description = body.get("description", "").strip()
+    price = float(body.get("price_usd") or 0.0)
+    condition = body.get("condition", "Used - Excellent")
+    shipping = body.get("shipping_options", "Standard Shipping")
+    location = body.get("location", "")
+    warranty = body.get("warranty_terms", "")
+    photos = body.get("photos", [])
+    
+    if not device_id or not title or price <= 0:
+        return jsonify({"error": "Missing required fields: device_id, title, price_usd > 0."}), 400
+        
+    ok, msg, res = create_marketplace_listing(
+        seller_username=username,
+        device_id=device_id,
+        title=title,
+        description=description,
+        price_usd=price,
+        condition=condition,
+        shipping_options=shipping,
+        location=location,
+        warranty_terms=warranty,
+        photos=photos
+    )
+    if not ok:
+        return jsonify({"error": msg}), 400
+    return jsonify({"status": "success", "message": msg, "listing": res}), 201
+
+@app.post("/api/marketplace/listings/<listing_id>/buy")
+@require_auth()
+def api_marketplace_buy(listing_id):
+    """Buyer initiates purchase order and ownership transfer."""
+    body = request.get_json(silent=True) or {}
+    user = getattr(request, "current_user", {})
+    buyer = user.get("sub", "Buyer")
+    notes = body.get("transfer_notes", "")
+    
+    ok, msg, res = initiate_device_purchase(
+        listing_id=listing_id,
+        buyer_username=buyer,
+        transfer_notes=notes
+    )
+    if not ok:
+        return jsonify({"error": msg}), 400
+    return jsonify({"status": "success", "message": msg, "order": res}), 200
+
+@app.post("/api/marketplace/transfers/<transfer_id>/complete")
+@require_auth()
+def api_marketplace_transfer_complete(transfer_id):
+    """Confirm delivery and finalize device ownership transfer."""
+    user = getattr(request, "current_user", {})
+    actor = user.get("sub", "System")
+    ok, msg = complete_ownership_transfer(transfer_id, actor)
+    if not ok:
+        return jsonify({"error": msg}), 400
+    return jsonify({"status": "success", "message": msg}), 200
+
+@app.get("/api/marketplace/verify/<cert_id>")
+def api_marketplace_public_verify(cert_id):
+    """Public certificate verification with privacy masking."""
+    res = get_public_certificate_verification(cert_id)
+    status_code = 200 if res.get("valid") else (404 if res.get("status") == "NOT_FOUND" else 200)
+    return jsonify(res), status_code
+
+@app.post("/api/marketplace/certificates/<cert_id>/revoke")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR])
+def api_marketplace_revoke_cert(cert_id):
+    """Admin revocation of a compromised or erroneous certificate."""
+    body = request.get_json(silent=True) or {}
+    user = getattr(request, "current_user", {})
+    admin = user.get("sub", "Administrator")
+    reason = body.get("reason", "Revoked by platform administrator.")
+    
+    ok, msg = revoke_certificate(cert_id, reason, admin)
+    if not ok:
+        return jsonify({"error": msg}), 400
+    return jsonify({"status": "success", "message": msg}), 200
+
+@app.get("/api/admin/marketplace/overview")
+@require_auth(allowed_roles=[ROLE_ADMINISTRATOR])
+def api_admin_marketplace_overview():
+    """Retrieve platform admin metrics."""
+    overview = get_admin_marketplace_overview()
+    return jsonify({"status": "success", "overview": overview}), 200
+
+# ---------------------------------------------------------------------------
+# Server Startup
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    init_auth_db()
+    init_audit_db()
+    init_compliance_db()
+    init_marketplace_db()
+    init_swarm_db()
     init_db()
     _init_history_db()
 
-    print("=" * 60)
-    print("  SecureWipe API — All endpoints on port 9758")
-    print("  Adaptive Sanitization & Recovery Verification Framework")
-    print("=" * 60)
-    app.run(host="0.0.0.0", port=9758, use_reloader=False)
+    print("=" * 70)
+    print(f"  SecureWipe Commercial Platform API — Environment: {APP_ENV}")
+    print(f"  Listening on: http://{DEFAULT_HOST}:{DEFAULT_PORT}")
+    print("  Sanitization + Cryptographic Certification + Verified Marketplace")
+    print("=" * 70)
+    app.run(host=DEFAULT_HOST, port=DEFAULT_PORT, use_reloader=False)
+

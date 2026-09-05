@@ -3,6 +3,8 @@ from flask_cors import CORS
 import threading
 import time
 import os
+import re
+import subprocess
 import random
 import psutil
 import ctypes
@@ -375,31 +377,33 @@ class PendriveWiper:
 
             # --- Phase 3: Format the drive (FAT32 quick format) ---
             self.active_wipes[wipe_id].update({'status': 'formatting', 'progress': 85})
-            letter_char = drive_letter.replace(':', '').replace('\\', '').replace('/', '')
-            logger.info(f"Formatting drive {letter_char}: as FAT32...")
-
-            try:
-                # Try PowerShell Format-Volume first (clean & non-interactive)
-                ps_cmd = f'powershell -NoProfile -Command "Format-Volume -DriveLetter {letter_char} -FileSystem FAT32 -NewFileSystemLabel \'USB\' -Force -Confirm:$false"'
-                result = subprocess.run(
-                    ps_cmd,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                if result.returncode == 0:
-                    logger.info(f"PowerShell format completed: {result.stdout.strip()}")
-                else:
-                    logger.warning(f"PowerShell format non-zero ({result.returncode}), trying CMD format: {result.stderr.strip()}")
-                    # Fallback to CMD format with /Y /Q /V to avoid interactive prompts
-                    cmd_fmt = f'format {letter_char}: /FS:FAT32 /V:USB /Q /Y'
-                    res2 = subprocess.run(cmd_fmt, shell=True, capture_output=True, text=True, timeout=60)
-                    logger.info(f"CMD format result: {res2.stdout.strip()}")
-            except subprocess.TimeoutExpired:
-                logger.warning("Format timed out — drive files already wiped")
-            except Exception as fmt_err:
-                logger.warning(f"Format step error: {fmt_err}")
+            letter_char = drive_letter.replace(':', '').replace('\\', '').replace('/', '').upper()
+            if not re.match(r'^[A-Z]$', letter_char) or letter_char == 'C':
+                logger.warning(f"Refusing to format invalid or system drive letter '{letter_char}'")
+            else:
+                logger.info(f"Formatting drive {letter_char}: as FAT32...")
+                try:
+                    # PowerShell Format-Volume with argument array (No shell=True)
+                    ps_cmd = f"Format-Volume -DriveLetter {letter_char} -FileSystem FAT32 -NewFileSystemLabel 'USB' -Force -Confirm:$false"
+                    result = subprocess.run(
+                        ["powershell", "-NoProfile", "-Command", ps_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                        check=False
+                    )
+                    if result.returncode == 0:
+                        logger.info(f"PowerShell format completed: {result.stdout.strip()}")
+                    else:
+                        logger.warning(f"PowerShell format non-zero ({result.returncode}), trying CMD format: {result.stderr.strip()}")
+                        # Fallback to CMD format with argument array (No shell=True)
+                        cmd_fmt = ["format", f"{letter_char}:", "/FS:FAT32", "/V:USB", "/Q", "/Y"]
+                        res2 = subprocess.run(cmd_fmt, capture_output=True, text=True, timeout=60, check=False)
+                        logger.info(f"CMD format result: {res2.stdout.strip()}")
+                except subprocess.TimeoutExpired:
+                    logger.warning("Format timed out — drive files already wiped")
+                except Exception as fmt_err:
+                    logger.warning(f"Format step error: {fmt_err}")
 
             # --- Done ---
             self.active_wipes[wipe_id].update({

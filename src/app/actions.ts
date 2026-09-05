@@ -78,8 +78,8 @@ export async function getMasterUserDetails(username: string) {
 
 export async function login(prevState: any, formData: FormData) {
   const schema = z.object({
-    username: z.string(),
-    password: z.string(),
+    username: z.string().min(1, 'Username is required'),
+    password: z.string().min(1, 'Password is required'),
     companyName: z.string().optional(),
     position: z.string().optional(),
     address: z.string().optional(),
@@ -87,53 +87,37 @@ export async function login(prevState: any, formData: FormData) {
   });
   const data = schema.parse(Object.fromEntries(formData));
 
-  let role = '';
-  if (data.username === 'Madhan' && data.password === 'iamironman') {
-    role = 'master';
+  try {
+    const authRes = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: data.username,
+        password: data.password,
+      }),
+    });
 
-    try {
-      const response = await fetch(`${API_BASE}/api/login-storage`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: data.username,
-          companyName: data.companyName,
-          position: data.position,
-          address: data.address,
-          personalInfo: data.personalInfo,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorResult = await response.json().catch(() => ({ message: 'Failed to store user details.' }));
-        return {
-            error: errorResult.message || 'An unknown error occurred with the storage service.'
-        };
-      }
-
-      const result = await response.json();
-      if (result.status !== 'success') {
-          return { error: result.message || 'Storage service returned an error.' };
-      }
-
-    } catch (error) {
-        console.error('Failed to connect to loginStorage endpoint:', error);
-        return { error: 'Could not connect to the user information storage service. Please ensure it is running.' };
+    const result = await authRes.json();
+    if (!authRes.ok || result.status !== 'success') {
+      return {
+        error: result.message || 'Invalid username or password.',
+      };
     }
 
+    const user = result.user;
+    const role = (user.role === 'ADMINISTRATOR' ? 'master' : 'worker');
 
-  } else if (data.username === 'Worker' && data.password === 'iambenten') {
-    role = 'worker';
-  }
-
-  if (role) {
     const cookieStore = await cookies();
-    cookieStore.set('session', JSON.stringify({username: data.username, role}), {
+    cookieStore.set('session', JSON.stringify({ username: user.username, role, token: user.token }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 1 week
+      path: '/',
+    });
+    cookieStore.set('session_token', user.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
     cookieStore.set('userRole', role, {
@@ -147,16 +131,24 @@ export async function login(prevState: any, formData: FormData) {
     } else {
       redirect('/worker/dashboard');
     }
-  } else {
+  } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
+    console.error('Login action error:', error);
     return {
-      error: 'Invalid username or password.',
+      error: error.message || 'Authentication service error. Ensure the backend is running.',
     };
   }
 }
 
 export async function logout() {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' }).catch(() => null);
+  } catch {}
   const cookieStore = await cookies();
   cookieStore.delete('session');
+  cookieStore.delete('session_token');
   cookieStore.delete('userRole');
   redirect('/login');
 }

@@ -105,6 +105,7 @@ const mockUsers: ConnectedUser[] = [
 export default function ConnectedUsers() {
   const [users, setUsers] = useState<ConnectedUser[]>([]);
   const [status, setStatus] = useState<FetchState>('loading');
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const fetchConnectedUsers = () => {
     setUsers(mockUsers);
     setStatus('success');

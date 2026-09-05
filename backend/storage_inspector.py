@@ -320,6 +320,24 @@ def inspect_storage_metadata(target_path: str) -> Dict[str, Any]:
                         info["os_metadata"]["volume_label"] = d.get("label") or "Not available"
                         info["os_metadata"]["uuid"] = d.get("uuid") or "Not available"
 
+                        # Read firmware revision from sysfs if exposed
+                        try:
+                            base_name = os.path.basename(target_path)
+                            for fw_path in [
+                                f"/sys/block/{base_name}/device/firmware_rev",
+                                f"/sys/class/block/{base_name}/device/firmware_rev",
+                                f"/sys/block/{base_name}/device/rev",
+                                f"/sys/class/block/{base_name}/device/rev",
+                            ]:
+                                if os.path.exists(fw_path):
+                                    with open(fw_path, "r") as ff:
+                                        fw = ff.read().strip()
+                                        if fw:
+                                            info["physical_identity"]["firmware_revision"] = fw
+                                            break
+                        except Exception:
+                            pass
+
                         if log_sec > 0 and sz > 0:
                             info["physical_identity"]["total_sectors"] = sz // log_sec
 

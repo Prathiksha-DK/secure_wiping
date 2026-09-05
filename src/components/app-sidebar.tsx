@@ -18,6 +18,8 @@ import {
   Network,
   Eye,
   Search,
+  Users,
+  Gamepad2,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -30,11 +32,10 @@ import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
 
 const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
+  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
   { href: '/worker/history', icon: History, label: 'History & Audit' },
   { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
   { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
@@ -42,11 +43,11 @@ const workerNavItems = [
 
 const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
+  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
-  { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/history', icon: History, label: 'History & Audit' },
   { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
 ];

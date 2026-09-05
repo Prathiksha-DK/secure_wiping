@@ -95,8 +95,8 @@ def _windows_disk_from_drive_letter(letter: str) -> Optional[int]:
 
 
 def _pick_disk_by_name_or_size(device_name: str) -> Optional[Dict[str, Any]]:
-    """Pick a disk dict by matching name/model/serial, drive letter, or approximate size."""
-    if not device_name:
+    """Pick a disk dict by matching exact name/model/serial or drive letter. Never guess."""
+    if not device_name or not isinstance(device_name, str):
         return None
 
     # Drive letter targeting (e.g., "E", "E:")
@@ -112,29 +112,16 @@ def _pick_disk_by_name_or_size(device_name: str) -> Optional[Dict[str, Any]]:
     if not disks:
         return None
 
-    name_san = _sanitize_device_name(device_name).lower()
-    name_orig = (device_name or "").lower()
+    name_san = _sanitize_device_name(device_name).strip().lower()
+    name_orig = (device_name or "").strip().lower()
 
-    # First pass: substring match on FriendlyName/Model/SerialNumber
-    for cand in (name_san, name_orig):
-        if not cand:
-            continue
-        for d in disks:
-            if (cand in (d.get("FriendlyName", "").lower()) or
-                cand in (d.get("Model", "").lower()) or
-                cand in (d.get("SerialNumber", "").lower())):
-                return d
-
-    # Second pass: approximate size match
-    target_size = _parse_size_from_name(device_name)
-    if target_size > 0:
-        for d in disks:
-            sz = int(d.get("Size") or 0)
-            if sz <= 0:
-                continue
-            # Allow 15% tolerance
-            if abs(sz - target_size) <= max(int(0.15 * target_size), CHUNK_SIZE):
-                return d
+    # Match exact or normalized FriendlyName/Model/SerialNumber
+    for d in disks:
+        fn = str(d.get("FriendlyName", "")).strip().lower()
+        md = str(d.get("Model", "")).strip().lower()
+        sn = str(d.get("SerialNumber", "")).strip().lower()
+        if name_orig in (fn, md, sn) or name_san in (fn, md, sn):
+            return d
 
     return None
 
@@ -324,6 +311,11 @@ def encrypt_and_wipe(device_name: str) -> Tuple[bool, str]:
     - Refuses to operate on the system volume (e.g., C:\\ on Windows or / on POSIX) when doing file-level pass.
     - Raw device encryption requires Administrator privileges and targets the matched disk.
     """
+    from storage_safety import validate_storage_safety
+    safety = validate_storage_safety(device_name)
+    if not safety["safe"]:
+        return False, f"SAFETY ABORT: {'; '.join(safety['reasons'])}"
+
     mounts = _resolve_mounts_cross_platform(device_name)
 
     # Generate ephemeral AES-256 key

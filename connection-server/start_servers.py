@@ -14,23 +14,20 @@ from multiprocessing import Process
 def start_main_server():
     """Start the main server on port 8586"""
     print("[*] Starting Main Server (port 8586)...")
-    os.system("python main_server.py")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([sys.executable, os.path.join(script_dir, "main_server.py")])
 
 def start_api_server():
     """Start the API server on port 5403"""
     print("[*] Starting API Server (port 5403)...")
     # Wait a bit for main server to start
     time.sleep(3)
-    os.system("python api_server.py")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([sys.executable, os.path.join(script_dir, "api_server.py")])
 
 def signal_handler(signum, frame):
     """Handle shutdown of both servers"""
     print("\n[-] Shutting down both servers...")
-    # Kill any running Python processes (be careful in production!)
-    try:
-        os.system("taskkill /F /IM python.exe 2>nul")
-    except:
-        pass
     sys.exit(0)
 
 if __name__ == '__main__':
