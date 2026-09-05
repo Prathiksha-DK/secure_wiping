@@ -20,7 +20,8 @@ import {
   Shield,
   Layers,
   Lock,
-  Sparkles
+  Sparkles,
+  Activity,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -36,6 +37,7 @@ import { Button } from '@/components/ui/button';
 export const workerNavItems = [
   { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/worker/wipe', icon: Trash2, label: 'Secure Wipe' },
+  { href: '/assessment', icon: Activity, label: 'Residual Assessment' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector' },
   { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter' },
@@ -46,6 +48,7 @@ export const workerNavItems = [
 export const masterNavItems = [
   { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Dashboard' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
+  { href: '/assessment', icon: Activity, label: 'Residual Assessment' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector' },
   { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter' },

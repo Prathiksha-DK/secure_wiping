@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -363,6 +364,11 @@ export default function StorageInspectorPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/assessment">
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs">
+              <Activity className="h-4 w-4 mr-1.5" /> Residual Scan (Phase 9)
+            </Button>
+          </Link>
           <Button size="sm" variant="outline" onClick={() => loadDeviceAndSector(target, lba, sectorSize, sectorCount)} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>

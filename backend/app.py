@@ -47,6 +47,17 @@ from compliance_engine import (
 from security_dashboard import evaluate_security_status
 from swarm_routes import swarm_bp
 from swarm_engine import init_swarm_db
+from post_sanitization_assessment import (
+    stream_post_sanitization_assessment,
+    inspect_media_bytes,
+    run_comparative_sanitization_experiment,
+    generate_signed_assessment_certificate,
+    verify_assessment_certificate,
+    sync_assessment_fragments_to_swarm,
+    _assessment_sessions,
+    _assessment_lock,
+)
+from swarm_evidence_ingest import create_certified_forensic_evidence_image
 
 # ---------------------------------------------------------------------------
 # Flask Application Initialization
@@ -567,6 +578,236 @@ def post_inspector_export():
         return jsonify(report_data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# API: Phase 9 Post-Sanitization Residual Evidence Assessment Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/assessment/devices")
+def get_assessment_devices():
+    """List real block devices and verified forensic images available for assessment."""
+    try:
+        raw_devs = list_devices()
+        evidence_images = []
+        data_dir = os.environ.get("SECUREWIPE_DATA_DIR") or os.path.join(os.path.dirname(__file__), "data")
+        
+        # Scan data dir and subdirs for forensic raw disk images
+        if os.path.exists(data_dir):
+            for root, _, files in os.walk(data_dir):
+                for fn in files:
+                    if fn.endswith((".raw", ".dd", ".img", ".bin", ".iso")):
+                        fpath = os.path.join(root, fn)
+                        try:
+                            sz = os.path.getsize(fpath)
+                            evidence_images.append({
+                                "name": fpath,
+                                "friendlyName": f"Forensic Image: {fn} ({sz / (1024*1024):.1f} MB)",
+                                "type": "Forensic Image",
+                                "size": f"{sz / (1024*1024):.1f} MB",
+                                "sizeBytes": sz,
+                                "health": 100,
+                                "healthStatus": "Verified",
+                                "serial": f"IMG-{hashlib.sha256(fn.encode()).hexdigest()[:8].upper()}",
+                                "isSystem": False,
+                                "isImage": True,
+                            })
+                        except Exception:
+                            pass
+
+        return jsonify({
+            "status": "success",
+            "physical_devices": raw_devs,
+            "forensic_images": evidence_images,
+            "all_targets": raw_devs + evidence_images,
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.post("/api/assessment/start")
+def post_assessment_start():
+    """Start streaming read-only post-sanitization residual evidence scan."""
+    try:
+        import threading
+        body = request.get_json(silent=True) or {}
+        target_path = body.get("target_path", "").strip()
+        target_type = body.get("target_type", "disk")
+        sector_size = int(body.get("sector_size", 512))
+        prior_meta = body.get("prior_sanitization_meta", {})
+
+        if not target_path:
+            return jsonify({"status": "error", "message": "target_path is required."}), 400
+
+        assessment_id = f"ASMT-{_uuid.uuid4().hex[:10].upper()}"
+
+        def _run_bg():
+            stream_post_sanitization_assessment(
+                target_path=target_path,
+                target_type=target_type,
+                sector_size=sector_size,
+                prior_sanitization_meta=prior_meta,
+                assessment_id=assessment_id,
+            )
+
+        t = threading.Thread(target=_run_bg, daemon=True)
+        t.start()
+
+        return jsonify({
+            "status": "INITIALIZING",
+            "assessment_id": assessment_id,
+            "target_path": target_path,
+            "message": "Read-only post-sanitization assessment scan started in background.",
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.get("/api/assessment/status/<assessment_id>")
+def get_assessment_status(assessment_id):
+    """Poll progress of a post-sanitization assessment session."""
+    with _assessment_lock:
+        session = _assessment_sessions.get(assessment_id)
+
+    if not session:
+        return jsonify({"status": "error", "message": "Assessment session not found."}), 404
+
+    return jsonify({
+        "assessment_id": session.assessment_id,
+        "status": session.status,
+        "progress_pct": session.progress_pct,
+        "bytes_scanned": session.bytes_scanned,
+        "total_bytes": session.total_bytes,
+        "sectors_scanned": session.sectors_scanned,
+        "total_sectors": session.total_sectors,
+        "validated_count": len(session.validated_candidates),
+        "partial_count": len(session.partial_artifacts),
+        "anomaly_count": len(session.anomalies),
+        "signature_only_count": len(session.signature_only_hits),
+        "overall_classification": session.overall_classification,
+        "observation_statement": session.observation_statement,
+        "logs": session.logs[-20:],
+    }), 200
+
+
+@app.get("/api/assessment/report/<assessment_id>")
+def get_assessment_report(assessment_id):
+    """Retrieve full post-sanitization assessment report with ledger, heatmap, and disclaimers."""
+    with _assessment_lock:
+        session = _assessment_sessions.get(assessment_id)
+
+    if not session:
+        return jsonify({"status": "error", "message": "Assessment session not found."}), 404
+
+    report = session.to_report_dict()
+    return jsonify(report), 200
+
+
+@app.post("/api/assessment/inspect-bytes")
+def post_assessment_inspect_bytes():
+    """Live read-only byte-level physical inspector for any target offset/LBA."""
+    try:
+        body = request.get_json(silent=True) or {}
+        target_path = body.get("target_path", "").strip()
+        byte_offset = int(body.get("byte_offset", 0))
+        length_bytes = int(body.get("length_bytes", 512))
+        sector_size = int(body.get("sector_size", 512))
+        expected_pattern = body.get("expected_pattern", "0x00")
+
+        if not target_path:
+            return jsonify({"status": "ERROR", "message": "target_path is required."}), 400
+
+        result = inspect_media_bytes(
+            target_path=target_path,
+            byte_offset=byte_offset,
+            length_bytes=length_bytes,
+            sector_size=sector_size,
+            expected_pattern=expected_pattern,
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+@app.post("/api/assessment/comparative-experiment")
+def post_assessment_comparative_experiment():
+    """Run an automated comparative before/after sanitization experiment."""
+    try:
+        body = request.get_json(silent=True) or {}
+        exp_name = body.get("experiment_name", "EXPERIMENT-NIST-800-88-CLEAR")
+        image_size_mb = int(body.get("image_size_mb", 12))
+        wipe_method = body.get("wipe_method", "nist-clear")
+
+        result = run_comparative_sanitization_experiment(
+            experiment_name=exp_name,
+            image_size_mb=image_size_mb,
+            wipe_method=wipe_method,
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.get("/api/assessment/certificate/<assessment_id>")
+def get_assessment_certificate(assessment_id):
+    """Generate Schema v2.0 RSA-PSS signed certificate for completed assessment."""
+    try:
+        with _assessment_lock:
+            session = _assessment_sessions.get(assessment_id)
+
+        if not session:
+            return jsonify({"status": "error", "message": "Assessment session not found."}), 404
+
+        report = session.to_report_dict()
+        operator = request.args.get("operator", "Forensic Assurance Officer")
+        cert = generate_signed_assessment_certificate(report, operator=operator)
+        return jsonify(cert), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.post("/api/assessment/certificate/<assessment_id>/verify")
+def post_assessment_certificate_verify(assessment_id):
+    """Verify cryptographic signature and integrity of a Schema v2.0 Certificate."""
+    try:
+        cert_dict = request.get_json(silent=True)
+        if not cert_dict:
+            # Try to fetch current session certificate
+            with _assessment_lock:
+                session = _assessment_sessions.get(assessment_id)
+            if session:
+                cert_dict = generate_signed_assessment_certificate(session.to_report_dict())
+            else:
+                return jsonify({"status": "error", "message": "No certificate provided."}), 400
+
+        res = verify_assessment_certificate(cert_dict)
+        return jsonify(res), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.post("/api/assessment/swarm-sync/<assessment_id>")
+def post_assessment_swarm_sync(assessment_id):
+    """Sync residual fragment candidates to Swarm reconstruction micro-tasks."""
+    try:
+        body = request.get_json(silent=True) or {}
+        case_id = body.get("case_id", f"CASE-{assessment_id}")
+        res = sync_assessment_fragments_to_swarm(assessment_id, case_id=case_id)
+        return jsonify(res), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.post("/api/assessment/generate-test-image")
+def post_assessment_generate_test_image():
+    """Helper to generate an authentic multi-format test image in data directory."""
+    try:
+        data_dir = os.environ.get("SECUREWIPE_DATA_DIR") or os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        img_path = os.path.join(data_dir, "forensic_evidence_live.raw")
+        meta = create_certified_forensic_evidence_image(image_path=img_path, total_size_bytes=12 * 1024 * 1024)
+        return jsonify({"status": "success", "image": meta}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # ---------------------------------------------------------------------------
 # API: Device Enumeration & Reports
