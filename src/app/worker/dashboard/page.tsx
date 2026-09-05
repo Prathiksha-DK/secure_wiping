@@ -422,8 +422,8 @@ export default function WorkerDashboardPage() {
                 </Link>
               </Button>
               <Button variant="outline" size="sm" className="justify-start text-xs h-8.5" asChild>
-                <Link href="/iso-mode">
-                  <Disc3 className="mr-2 h-3.5 w-3.5 text-amber-500" /> ISO Boot Mode
+                <Link href="/worker/history">
+                  <FileClock className="mr-2 h-3.5 w-3.5 text-amber-500" /> View History &amp; Reports
                 </Link>
               </Button>
             </CardContent>

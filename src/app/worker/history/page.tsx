@@ -57,9 +57,10 @@ export default function HistoryPage() {
         const res = await fetch(`${API_BASE}/api/history`, { cache: 'no-store' });
         if (!res.ok) throw new Error("Failed to fetch history");
         const data = await res.json();
-        setHistoryData(data);
+        setHistoryData(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error("Failed to fetch history data:", error);
+        setHistoryData([]);
       } finally {
         setLoading(false);
       }

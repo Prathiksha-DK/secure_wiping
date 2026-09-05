@@ -21,63 +21,69 @@ def human_readable_size(num_bytes: Any) -> str:
 
 
 def _windows_list_devices() -> List[Dict[str, Any]]:
-    """Enumerate physical disks on Windows using PowerShell with accurate system disk detection."""
+    """Enumerate physical disks on Windows using PowerShell with full path resolution."""
     try:
-        ps_script = r"""
-$ErrorActionPreference = 'Stop'
-$sysDisks = @()
-try {
-    $sysParts = Get-Partition | Where-Object { $_.IsBoot -or $_.IsSystem -or $_.DriveLetter -eq 'C' }
-    if ($sysParts) {
-        $sysDisks = $sysParts | ForEach-Object { $_.DiskNumber } | Select-Object -Unique
-    }
-} catch {}
-
-$disks = Get-PhysicalDisk | Select-Object FriendlyName, MediaType, Size, HealthStatus, BusType, SerialNumber, DeviceId
-$result = @()
-foreach ($d in $disks) {
-    $isSys = $false
-    if ($d.DeviceId -and ($sysDisks -contains [int]$d.DeviceId)) {
-        $isSys = $true
-    }
-    $result += @{
-        FriendlyName = $d.FriendlyName
-        MediaType = $d.MediaType
-        Size = $d.Size
-        HealthStatus = $d.HealthStatus
-        BusType = $d.BusType
-        SerialNumber = $d.SerialNumber
-        DeviceId = $d.DeviceId
-        IsSystem = $isSys
-    }
-}
-$result | ConvertTo-Json -Depth 3
-"""
+        import base64
+        ps_script = (
+            "ConvertTo-Json -InputObject @{ "
+            "Disks = @(Get-Disk -ErrorAction SilentlyContinue | Select-Object Number, FriendlyName, SerialNumber, BusType, PartitionStyle, Size, LogicalSectorSize, PhysicalSectorSize, IsBoot, IsSystem); "
+            "PhysicalDisks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object FriendlyName, MediaType, Size, HealthStatus, BusType, SerialNumber, DeviceId); "
+            "Partitions = @(Get-Partition -ErrorAction SilentlyContinue | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size, Offset, Type, IsBoot, IsSystem) "
+            "} -Depth 4"
+        )
+        enc = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
         completed = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps_script],
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc],
             capture_output=True,
             text=True,
             check=False,
             timeout=10,
         )
-        if completed.returncode != 0:
+        if completed.returncode != 0 or not completed.stdout.strip():
             return []
-        raw = completed.stdout.strip()
-        if not raw:
-            return []
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            data = [data]
+        data = json.loads(completed.stdout)
+        disks_data = data.get("Disks") or []
+        pdisks_data = data.get("PhysicalDisks") or []
+        parts_data = data.get("Partitions") or []
+
+        if isinstance(disks_data, dict):
+            disks_data = [disks_data]
+        if isinstance(pdisks_data, dict):
+            pdisks_data = [pdisks_data]
+        if isinstance(parts_data, dict):
+            parts_data = [parts_data]
+
+        # Map physical disk details by device id / serial
+        pdisk_map: Dict[str, Dict[str, Any]] = {}
+        for pd in pdisks_data:
+            dev_id = str(pd.get("DeviceId", "")).strip()
+            if dev_id:
+                pdisk_map[dev_id] = pd
+            sn = str(pd.get("SerialNumber", "")).strip()
+            if sn:
+                pdisk_map[sn] = pd
+
+        # Map partitions by disk number
+        parts_by_disk: Dict[int, List[Dict[str, Any]]] = {}
+        for p in parts_data:
+            dn = p.get("DiskNumber")
+            if dn is not None:
+                parts_by_disk.setdefault(int(dn), []).append(p)
 
         devices = []
-        for d in data:
+        for d in disks_data:
+            dnum = d.get("Number")
             name = d.get("FriendlyName") or "Unknown Device"
-            media_type = d.get("MediaType") or "Unspecified"
             bus = d.get("BusType") or ""
             size = d.get("Size")
-            health_status = d.get("HealthStatus") or "Healthy"
             serial = d.get("SerialNumber") or ""
-            is_sys = bool(d.get("IsSystem", False))
+            is_boot = bool(d.get("IsBoot"))
+            is_system = bool(d.get("IsSystem")) or is_boot
+
+            # Physical disk overlay
+            pd_match = pdisk_map.get(str(dnum)) or pdisk_map.get(str(serial).strip()) or {}
+            media_type = pd_match.get("MediaType") or d.get("PartitionStyle") or "Unspecified"
+            health_status = pd_match.get("HealthStatus") or "Healthy"
 
             # Derive type
             dtype = "USB" if str(bus).upper() == "USB" else str(media_type)
@@ -92,9 +98,26 @@ $result | ConvertTo-Json -Depth 3
             else:
                 health_num = 100
 
+            # Find drive letters
+            disk_parts = parts_by_disk.get(int(dnum) if dnum is not None else -1, [])
+            drive_letters = [
+                f"{p['DriveLetter']}:"
+                for p in disk_parts
+                if p.get("DriveLetter") and str(p.get("DriveLetter")).strip()
+            ]
+
+            dev_path = f"\\\\.\\PhysicalDrive{dnum}" if dnum is not None else ""
+            display_name = f"{name} ({dev_path})" if dev_path else str(name)
+            if drive_letters:
+                display_name += f" [{', '.join(drive_letters)}]"
+
             devices.append(
                 {
                     "name": str(name),
+                    "friendlyName": display_name,
+                    "devicePath": dev_path,
+                    "deviceId": str(dnum) if dnum is not None else "",
+                    "driveLetters": drive_letters,
                     "type": str(dtype),
                     "size": human_readable_size(size) if isinstance(size, (int, float)) else human_readable_size(size),
                     "sizeBytes": int(size) if isinstance(size, (int, float)) else 0,
@@ -102,7 +125,11 @@ $result | ConvertTo-Json -Depth 3
                     "healthStatus": str(health_status),
                     "serial": str(serial).strip(),
                     "bus": str(bus),
+<<<<<<< HEAD
                     "isSystem": is_sys,
+=======
+                    "isSystem": is_system,
+>>>>>>> backup/storage-inspector-fat32
                 }
             )
         return devices

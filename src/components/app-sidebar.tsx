@@ -9,9 +9,12 @@ import {
   LayoutDashboard,
   History,
   Trash2,
-  Disc3,
   Settings,
   Package,
+<<<<<<< HEAD
+=======
+  Network,
+>>>>>>> backup/storage-inspector-fat32
   Eye,
   Search,
   Gamepad2,
@@ -42,7 +45,6 @@ export const workerNavItems = [
   { href: '/inspector', icon: Eye, label: 'Storage Inspector' },
   { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter' },
   { href: '/worker/history', icon: History, label: 'Audit & Reports' },
-  { href: '/iso-mode', icon: Disc3, label: 'ISO Boot Mode' },
 ];
 
 export const masterNavItems = [

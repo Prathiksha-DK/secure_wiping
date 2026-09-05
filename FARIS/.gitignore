@@ -28,3 +28,7 @@ tests/**/results/
 *.dd
 *.raw
 *.img
+# Forensic test evidence
+FARIS/tests/fixtures/*.E*
+# Forensic test evidence
+tests/fixtures/*.E*
