@@ -41,7 +41,7 @@ import {
   Info,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 
 interface StorageTarget {
   name: string;
@@ -151,6 +151,7 @@ interface AssessmentReport {
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:9758";
 
 export default function AssessmentPage() {
+  const { toast } = useToast();
   const [targets, setTargets] = useState<StorageTarget[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<string>("");
   const [loadingTargets, setLoadingTargets] = useState(false);
@@ -199,7 +200,7 @@ export default function AssessmentPage() {
       }
     } catch (e) {
       console.error("Failed to load targets:", e);
-      toast.error("Failed to connect to backend assessment engine.");
+      toast({ title: "Connection Error", description: "Failed to connect to backend assessment engine.", variant: "destructive" });
     } finally {
       setLoadingTargets(false);
     }
@@ -207,20 +208,20 @@ export default function AssessmentPage() {
 
   const generateTestImage = async () => {
     try {
-      toast.info("Generating authentic forensic test disk image...");
+      toast({ title: "Generating Image", description: "Generating authentic forensic test disk image..." });
       const res = await fetch(`${BACKEND_URL}/api/assessment/generate-test-image`, { method: "POST" });
       if (res.ok) {
-        toast.success("Authentic multi-format forensic disk image generated!");
+        toast({ title: "Image Ready", description: "Authentic multi-format forensic disk image generated!" });
         await fetchTargets();
       }
     } catch (e) {
-      toast.error("Error generating test image.");
+      toast({ title: "Error", description: "Error generating test image.", variant: "destructive" });
     }
   };
 
   const startAssessment = async () => {
     if (!selectedTarget) {
-      toast.error("Please select a valid storage device or forensic image.");
+      toast({ title: "Target Required", description: "Please select a valid storage device or forensic image.", variant: "destructive" });
       return;
     }
 
@@ -274,7 +275,7 @@ export default function AssessmentPage() {
               if (repRes.ok) {
                 const repData = await repRes.json();
                 setReport(repData);
-                toast.success(`Assessment complete: ${repData.scientific_assessment.overall_classification}`);
+                toast({ title: "Assessment Complete", description: `Classification: ${repData.scientific_assessment.overall_classification}` });
               }
             }
           }
@@ -285,7 +286,7 @@ export default function AssessmentPage() {
     } catch (e: any) {
       setIsScanning(false);
       setScanStatus("ERROR");
-      toast.error(e.message || "Failed to start assessment scan.");
+      toast({ title: "Scan Failed", description: e.message || "Failed to start assessment scan.", variant: "destructive" });
     }
   };
 
@@ -309,7 +310,7 @@ export default function AssessmentPage() {
         setInspectorData(data);
       }
     } catch (e) {
-      toast.error("Failed to read bytes from target.");
+      toast({ title: "Read Error", description: "Failed to read bytes from target.", variant: "destructive" });
     } finally {
       setLoadingInspector(false);
     }
@@ -319,7 +320,7 @@ export default function AssessmentPage() {
     setIsRunningExp(true);
     setExpResult(null);
     try {
-      toast.info(`Running comparative experiment (${expMethod.toUpperCase()})...`);
+      toast({ title: "Experiment Started", description: `Running comparative experiment (${expMethod.toUpperCase()})...` });
       const res = await fetch(`${BACKEND_URL}/api/assessment/comparative-experiment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -332,10 +333,10 @@ export default function AssessmentPage() {
       if (res.ok) {
         const data = await res.json();
         setExpResult(data);
-        toast.success(`Experiment completed! Artifact reduction: ${data.comparative_delta.artifact_reduction_percentage}%`);
+        toast({ title: "Experiment Complete", description: `Artifact reduction: ${data.comparative_delta.artifact_reduction_percentage}%` });
       }
     } catch (e) {
-      toast.error("Comparative experiment failed.");
+      toast({ title: "Experiment Failed", description: "Comparative experiment failed.", variant: "destructive" });
     } finally {
       setIsRunningExp(false);
     }
@@ -350,7 +351,7 @@ export default function AssessmentPage() {
         setCertData(data);
       }
     } catch (e) {
-      toast.error("Failed to load certificate.");
+      toast({ title: "Error", description: "Failed to load certificate.", variant: "destructive" });
     }
   };
 
@@ -366,20 +367,20 @@ export default function AssessmentPage() {
         const data = await res.json();
         setCertVerified(data.valid);
         if (data.valid) {
-          toast.success("RSA-PSS digital signature and canonical hash verified authentic!");
+          toast({ title: "Signature Verified", description: "RSA-PSS digital signature and canonical hash verified authentic!" });
         } else {
-          toast.error(`Verification failed: ${data.reason}`);
+          toast({ title: "Verification Failed", description: `Reason: ${data.reason}`, variant: "destructive" });
         }
       }
     } catch (e) {
-      toast.error("Failed to verify certificate signature.");
+      toast({ title: "Error", description: "Failed to verify certificate signature.", variant: "destructive" });
     }
   };
 
   const syncToSwarm = async () => {
     if (!currentAssessmentId) return;
     try {
-      toast.info("Synchronizing genuine residual fragments to Swarm...");
+      toast({ title: "Swarm Sync", description: "Synchronizing genuine residual fragments to Swarm..." });
       const res = await fetch(`${BACKEND_URL}/api/assessment/swarm-sync/${currentAssessmentId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -388,13 +389,13 @@ export default function AssessmentPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.status === "SUCCESS") {
-          toast.success(data.message);
+          toast({ title: "Swarm Sync Success", description: data.message });
         } else {
-          toast.info(data.message);
+          toast({ title: "Swarm Status", description: data.message });
         }
       }
     } catch (e) {
-      toast.error("Swarm sync failed.");
+      toast({ title: "Error", description: "Swarm sync failed.", variant: "destructive" });
     }
   };
 
