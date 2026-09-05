@@ -11,10 +11,6 @@ import {
   Trash2,
   Settings,
   Package,
-<<<<<<< HEAD
-=======
-  Network,
->>>>>>> backup/storage-inspector-fat32
   Eye,
   Search,
   Gamepad2,

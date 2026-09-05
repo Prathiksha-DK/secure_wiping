@@ -125,11 +125,7 @@ def _windows_list_devices() -> List[Dict[str, Any]]:
                     "healthStatus": str(health_status),
                     "serial": str(serial).strip(),
                     "bus": str(bus),
-<<<<<<< HEAD
-                    "isSystem": is_sys,
-=======
                     "isSystem": is_system,
->>>>>>> backup/storage-inspector-fat32
                 }
             )
         return devices
