@@ -1,24 +1,23 @@
-
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ShieldCheck,
   PanelLeft,
-  Search,
   LayoutDashboard,
-  History,
-  Trash2,
-  Disc3,
-  Settings,
-  Undo,
+  Building2,
+  User,
+  Search,
   LogOut,
-  Package,
-  Bomb,
-  FileLock,
-  Network,
+  Radio,
+  Terminal,
+  ChevronRight,
   Eye,
+  Trash2,
+  History,
+  Lock,
 } from 'lucide-react';
 import {
   Sheet,
@@ -26,7 +25,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -35,192 +33,185 @@ import {
   DropdownMenuSeparator,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from '@/components/ui/breadcrumb';
-import { ThemeToggle } from '@/components/theme-toggle';
-import React from 'react';
+import { Badge } from '@/components/ui/badge';
 import { logout } from '@/app/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
 
-const workerNavItems = [
-  { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
-  { href: '/worker/history', icon: History, label: 'History & Audit' },
-  { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
-  { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
-];
-
-const masterNavItems = [
-  { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
-  { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
-  { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/history', icon: History, label: 'History & Audit' },
-  { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
-];
-
-function getRoleFromCookie() {
-  if (typeof window === 'undefined') return 'worker';
-  const match = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : 'worker';
+function getRoleFromCookie(): string {
+  if (typeof window === 'undefined') return 'individual';
+  const roleMatch = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
+  if (roleMatch) return decodeURIComponent(roleMatch[1]);
+  const sessionMatch = document.cookie.match(/(?:^|; )session=([^;]*)/);
+  if (sessionMatch) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionMatch[1]));
+      return parsed.role || 'individual';
+    } catch {
+      return 'individual';
+    }
+  }
+  return 'individual';
 }
 
 export default function AppHeader() {
   const pathname = usePathname();
-  const pathSegments = pathname.split('/').filter(Boolean);
-  const [role, setRole] = React.useState('worker');
+  const [role, setRole] = React.useState('individual');
   const [mounted, setMounted] = React.useState(false);
-  const [isLocked, setIsLocked] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
     setRole(getRoleFromCookie());
-    setIsLocked(isFarisLocked());
-
-    const handleLockChange = (e: any) => {
-      setIsLocked(Boolean(e.detail?.locked ?? isFarisLocked()));
-    };
-
-    window.addEventListener('faris-lock-change', handleLockChange);
-    return () => {
-      window.removeEventListener('faris-lock-change', handleLockChange);
-    };
   }, [pathname]);
 
-  const handleNavClick = (e: React.MouseEvent, targetHref: string) => {
-    if (isFarisLocked()) {
-      if (targetHref !== '/faris' && !targetHref.startsWith('/faris/')) {
-        e.preventDefault();
-        e.stopPropagation();
-        showNavigationLockedAlert();
-      }
-    }
+  const pathSegments = pathname.split('/').filter(Boolean);
+
+  const roleConfigs: Record<string, { label: string; badgeClass: string; icon: any; username: string }> = {
+    individual: {
+      label: 'Individual User',
+      badgeClass: 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300',
+      icon: User,
+      username: 'citizen_user',
+    },
+    government: {
+      label: 'Government / Org',
+      badgeClass: 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300',
+      icon: Building2,
+      username: 'gov_officer',
+    },
+    forensic: {
+      label: 'Forensic Investigator',
+      badgeClass: 'border-amber-500/40 bg-amber-950/40 text-amber-300',
+      icon: Search,
+      username: 'forensic_analyst',
+    },
   };
 
-  if (!mounted) {
-    return (
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6"></header>
-    );
-  }
-
-  const isMaster = role === 'master';
-  const items = isMaster ? masterNavItems : workerNavItems;
-  const base_path = isMaster ? '/master' : '/worker';
+  const currentRoleConfig = roleConfigs[role] || roleConfigs.individual;
+  const RoleIcon = currentRoleConfig.icon;
 
   return (
-    <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button size="icon" variant="outline" className="sm:hidden">
-              <PanelLeft className="h-5 w-5" />
-              <span className="sr-only">Toggle Menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="sm:max-w-xs">
-            <nav className="grid gap-6 text-lg font-medium">
-              <Link
-                href={`${base_path}/dashboard`}
-                onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
-                className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
-              >
-                <ShieldCheck className="h-5 w-5 transition-all group-hover:scale-110" />
-                <span className="sr-only">SecureWipe</span>
-              </Link>
-              {items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              ))}
-               <Link
-                  href="#"
-                  onClick={(e) => handleNavClick(e, '#')}
-                  className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <Settings className="h-5 w-5" />
-                  Settings
-                </Link>
-            </nav>
-          </SheetContent>
-        </Sheet>
-        <Breadcrumb className="hidden md:flex">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href={`${base_path}/dashboard`} onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}>Dashboard</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            {pathSegments.slice(1).map((segment, index) => (
-              <React.Fragment key={segment}>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="capitalize">
-                    {segment.replace(/-/g, ' ')}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </React.Fragment>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="relative ml-auto flex-1 md:grow-0">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[336px]"
-          />
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-800/80 bg-[#090e1a]/95 px-6 backdrop-blur-md shadow-sm w-full">
+      {/* Mobile Drawer */}
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button size="icon" variant="outline" className="md:hidden border-slate-800 bg-slate-900 text-slate-300">
+            <PanelLeft className="h-4 w-4" />
+            <span className="sr-only">Toggle Menu</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="sm:max-w-xs bg-slate-950 border-slate-800 text-slate-100 p-5">
+          <nav className="grid gap-4 text-sm font-medium">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-base font-bold text-cyan-400"
+            >
+              <ShieldCheck className="h-5 w-5" />
+              <span>SecureWipe NTRO</span>
+            </Link>
+            <Link href="/individual/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Individual Dashboard</span>
+            </Link>
+            <Link href="/government/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Building2 className="h-4 w-4" />
+              <span>Government Fleet</span>
+            </Link>
+            <Link href="/forensic/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Search className="h-4 w-4" />
+              <span>Forensic Workbench</span>
+            </Link>
+            <Link href="/inspector" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Eye className="h-4 w-4" />
+              <span>Hex Inspector</span>
+            </Link>
+            <Link href="/wipe" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Trash2 className="h-4 w-4" />
+              <span>Sanitization Engine</span>
+            </Link>
+          </nav>
+        </SheetContent>
+      </Sheet>
+
+      {/* Breadcrumb Path Navigation */}
+      <div className="hidden md:flex items-center gap-2 text-xs font-mono text-slate-300">
+        <Link href="/" className="hover:text-cyan-300 transition-colors font-medium text-slate-400">SecureWipe</Link>
+        {pathSegments.map((segment, index) => (
+          <React.Fragment key={index}>
+            <ChevronRight className="h-3 w-3 text-slate-500" />
+            <span className={index === pathSegments.length - 1 ? 'text-white font-bold uppercase tracking-wider' : 'text-slate-300 capitalize'}>
+              {segment.replace(/-/g, ' ')}
+            </span>
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Right-side Controls */}
+      <div className="ml-auto flex items-center gap-3">
+        {/* API Liveness Heartbeat */}
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full border border-slate-800 bg-slate-900/80 text-[11px] font-mono text-slate-300 shadow-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span>Core API : 9758 Active</span>
         </div>
-        <ThemeToggle />
+
+        {/* Role Badge */}
+        <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-mono font-medium shadow-sm ${currentRoleConfig.badgeClass}`}>
+          <RoleIcon className="h-3.5 w-3.5" />
+          <span>{currentRoleConfig.label}</span>
+        </div>
+
+        {/* User Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="overflow-hidden rounded-full"
+              className="overflow-hidden rounded-full border-slate-800 bg-slate-900 hover:border-slate-700 h-8 w-8 text-slate-200"
             >
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                  {isMaster ? 'M' : 'W'}
+                <AvatarFallback className="bg-slate-800 text-xs font-bold text-cyan-400">
+                  {currentRoleConfig.username.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{isMaster ? 'Master Account' : 'Worker Account'}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Support</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form action={logout} className="w-full">
-                <button type="submit" className="w-full text-left flex items-center">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </button>
-              </form>
+          <DropdownMenuContent align="end" className="w-56 bg-slate-950 border-slate-800 text-slate-200 shadow-2xl">
+            <DropdownMenuLabel className="font-mono text-xs">
+              <div className="text-white font-semibold">{currentRoleConfig.username}</div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider">{currentRoleConfig.label}</div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-slate-800" />
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/individual/dashboard" className="flex items-center gap-2 text-xs">
+                <User className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Individual User View</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/government/dashboard" className="flex items-center gap-2 text-xs">
+                <Building2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Government Fleet View</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/forensic/dashboard" className="flex items-center gap-2 text-xs">
+                <Search className="h-3.5 w-3.5 text-amber-400" />
+                <span>Forensic Workbench View</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-800" />
+            <DropdownMenuItem
+              onClick={() => logout()}
+              className="text-red-400 hover:text-red-300 hover:bg-red-950/30 cursor-pointer text-xs flex items-center gap-2"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out Session</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </header>
-    </>
+      </div>
+    </header>
   );
 }

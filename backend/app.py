@@ -21,6 +21,11 @@ from user_storage import init_db, insert_user, get_user_by_username
 app = Flask("securewipe_api")
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+from ntro_platform_api import ntro_bp
+from auth import init_platform_db
+app.register_blueprint(ntro_bp)
+init_platform_db()
+
 # -----------------------------------------------------------
 # Database helpers for wipe history & reports
 # -----------------------------------------------------------

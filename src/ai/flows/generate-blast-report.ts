@@ -9,7 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
+import { z } from 'genkit';
 
 const BomberGameInputSchema = z.object({
   grid: z.array(z.array(z.number())).describe("The entire game grid, a 2D array of 0s and 1s."),
@@ -70,7 +70,8 @@ export async function generateBlastReport(input: BomberGameInput): Promise<Bombe
     });
 }
 
-const prompt = ai.definePrompt({
+// @ts-ignore
+const prompt = (ai as any).definePrompt({
   name: 'generateBlastReportPrompt',
   input: { schema: z.object({ pattern: z.string(), bombsUsed: z.number(), gridSize: z.string(), extractionEfficiency: z.number() }) },
   output: { schema: BomberGameOutputSchema },

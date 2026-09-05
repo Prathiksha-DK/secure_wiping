@@ -1,50 +1,64 @@
-
-import {NextResponse} from 'next/server';
-import type {NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const session = request.cookies.get('session');
-  const {pathname} = request.nextUrl;
+  const sessionCookie = request.cookies.get('session') || request.cookies.get('session_token');
+  const { pathname } = request.nextUrl;
 
-  // Allow direct access to dashboards for testing
-  if (pathname.startsWith('/master/dashboard') || pathname.startsWith('/worker/dashboard')) {
-      return NextResponse.next();
+  // Allow direct access to public resources and api routes
+  if (
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon.ico')
+  ) {
+    return NextResponse.next();
   }
 
   // If there's no session and the user is not on the login page, redirect to login
-  if (!session && pathname !== '/login') {
+  if (!sessionCookie && pathname !== '/login') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // If there's a session
-  if (session) {
+  if (sessionCookie) {
     try {
-      const sessionData = JSON.parse(session.value);
-      const {role} = sessionData;
-
-      // If user is on login page, redirect to their dashboard
-      if (pathname === '/login') {
-        if (role === 'master') {
-          return NextResponse.redirect(new URL('/master/dashboard', request.url));
+      let role = 'individual';
+      try {
+        const parsed = JSON.parse(sessionCookie.value);
+        role = parsed.role || 'individual';
+      } catch {
+        // Fallback: check userRole cookie
+        const userRoleCookie = request.cookies.get('userRole');
+        if (userRoleCookie) {
+          role = userRoleCookie.value;
         }
-        if (role === 'worker') {
-          return NextResponse.redirect(new URL('/worker/dashboard', request.url));
+      }
+
+      // If user is on the root landing page (/), redirect to their role dashboard
+      if (pathname === '/') {
+        if (role === 'government') {
+          return NextResponse.redirect(new URL('/government/dashboard', request.url));
+        } else if (role === 'forensic') {
+          return NextResponse.redirect(new URL('/forensic/dashboard', request.url));
+        } else {
+          return NextResponse.redirect(new URL('/individual/dashboard', request.url));
         }
       }
 
-      // Role-based access control
-      if (pathname.startsWith('/master') && role !== 'master') {
-        return NextResponse.redirect(new URL('/worker/dashboard', request.url));
+      // Enforce role boundaries
+      if (pathname.startsWith('/government') && role !== 'government') {
+        return NextResponse.redirect(new URL(role === 'forensic' ? '/forensic/dashboard' : '/individual/dashboard', request.url));
       }
-      if (pathname.startsWith('/worker') && role !== 'worker') {
-        return NextResponse.redirect(new URL('/master/dashboard', request.url));
+      if (pathname.startsWith('/forensic') && role !== 'forensic') {
+        return NextResponse.redirect(new URL(role === 'government' ? '/government/dashboard' : '/individual/dashboard', request.url));
       }
-
-    } catch (error) {
-        // If cookie is malformed, clear it and redirect to login
-        const response = NextResponse.redirect(new URL('/login', request.url));
-        response.cookies.delete('session');
-        return response;
+      if (pathname.startsWith('/individual') && role !== 'individual') {
+        return NextResponse.redirect(new URL(role === 'government' ? '/government/dashboard' : '/forensic/dashboard', request.url));
+      }
+    } catch {
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('session');
+      response.cookies.delete('userRole');
+      return response;
     }
   }
 
@@ -53,13 +67,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };

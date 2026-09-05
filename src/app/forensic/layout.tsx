@@ -3,7 +3,7 @@ import AppSidebar from '@/components/app-sidebar';
 import AppHeader from '@/components/app-header';
 import NavigationLockModal from '@/components/navigation-lock-modal';
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default function ForensicLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full bg-[#060A12] text-slate-100">
       <AppSidebar />

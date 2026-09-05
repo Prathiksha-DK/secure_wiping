@@ -39,7 +39,8 @@ export async function suggestWipeMethod(input: SuggestWipeMethodInput): Promise<
   return suggestWipeMethodFlow(input);
 }
 
-const prompt = ai.definePrompt({
+// @ts-ignore
+const prompt = (ai as any).definePrompt({
   name: 'suggestWipeMethodPrompt',
   input: {schema: SuggestWipeMethodInputSchema},
   output: {schema: SuggestWipeMethodOutputSchema},

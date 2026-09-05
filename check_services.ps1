@@ -17,7 +17,7 @@ function Check-Port {
         # Port is open, try HTTP GET check if path specified
         if ($Path -ne "") {
             try {
-                $response = Invoke-RestMethod -Uri "http://localhost:$Port$Path" -Method Get -TimeoutSec 2
+                $response = Invoke-RestMethod -Uri "http://127.0.0.1:$Port$Path" -Method Get -TimeoutSec 3
                 return "OK"
             } catch {
                 return "OK (Unresponsive HTTP)"
@@ -46,14 +46,20 @@ $reports = Check-Port "Reports" 9758 "/api/history"
 $boom = Check-Port "Boom Wipe" 5695 "/health"
 $pendrive = Check-Port "Pendrive" 8743 "/health"
 
-Write-Host ("Frontend         :3000   " + $frontend) -ForegroundColor ($frontend -eq "OK" ? "Green" : "Red")
-Write-Host ("Main Backend     :9758   " + $backend) -ForegroundColor ($backend -eq "OK" ? "Green" : "Red")
-Write-Host ("Socket           :8586   " + $socket) -ForegroundColor ($socket -eq "OK" ? "Green" : "Red")
-Write-Host ("Connection API   :5403   " + $connApi) -ForegroundColor ($connApi -eq "OK" ? "Green" : "Red")
-Write-Host ("Restore          :9758   " + $restore) -ForegroundColor ($restore -eq "OK" ? "Green" : "Red")
-Write-Host ("Reports          :9758   " + $reports) -ForegroundColor ($reports -eq "OK" ? "Green" : "Red")
-Write-Host ("Boom Wipe        :5695   " + $boom) -ForegroundColor ($boom -eq "OK" ? "Green" : "Yellow")
-Write-Host ("Pendrive         :8743   " + $pendrive) -ForegroundColor ($pendrive -eq "OK" ? "Green" : "Yellow")
+function Format-StatusColor($status, $isOptional = $false) {
+    if ($status -eq "OK") { return "Green" }
+    if ($isOptional) { return "Yellow" }
+    return "Red"
+}
+
+Write-Host ("Frontend         :3000   " + $frontend) -ForegroundColor (Format-StatusColor $frontend)
+Write-Host ("Main Backend     :9758   " + $backend) -ForegroundColor (Format-StatusColor $backend)
+Write-Host ("Socket           :8586   " + $socket) -ForegroundColor (Format-StatusColor $socket)
+Write-Host ("Connection API   :5403   " + $connApi) -ForegroundColor (Format-StatusColor $connApi)
+Write-Host ("Restore          :9758   " + $restore) -ForegroundColor (Format-StatusColor $restore)
+Write-Host ("Reports          :9758   " + $reports) -ForegroundColor (Format-StatusColor $reports)
+Write-Host ("Boom Wipe        :5695   " + $boom) -ForegroundColor (Format-StatusColor $boom $true)
+Write-Host ("Pendrive         :8743   " + $pendrive) -ForegroundColor (Format-StatusColor $pendrive $true)
 Write-Host "Facial Security  :5000   SKIPPED" -ForegroundColor Gray
 Write-Host "DoD Wipe         :--     NOT EXECUTED" -ForegroundColor Gray
 

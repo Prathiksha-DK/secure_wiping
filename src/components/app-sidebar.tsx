@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -18,6 +17,12 @@ import {
   Network,
   Eye,
   Search,
+  Building2,
+  Lock,
+  FolderLock,
+  FileCheck2,
+  Activity,
+  ShoppingBag,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -28,38 +33,57 @@ import {
 import { cn } from '@/lib/utils';
 import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
 
-const workerNavItems = [
-  { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+const individualNavItems = [
+  { href: '/individual/dashboard', icon: LayoutDashboard, label: 'User Dashboard' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
-  { href: '/worker/history', icon: History, label: 'History & Audit' },
-  { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
-  { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
+  { href: '/wipe', icon: Trash2, label: 'Secure Sanitization' },
+  { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
+  { href: '/history', icon: History, label: 'Certificates & Records' },
+  { href: '/individual/marketplace', icon: ShoppingBag, label: 'Private Marketplace' },
 ];
 
-const masterNavItems = [
-  { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
+const governmentNavItems = [
+  { href: '/government/dashboard', icon: Building2, label: 'Fleet & LAN Command' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
-  { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
+  { href: '/wipe', icon: Trash2, label: 'Managed & Remote Wipe' },
+  { href: '/government/audit', icon: Activity, label: 'Tamper-Evident Audit' },
+  { href: '/history', icon: History, label: 'Compliance Reports' },
+];
+
+const forensicNavItems = [
+  { href: '/forensic/dashboard', icon: Search, label: 'Forensic Workbench' },
+  { href: '/inspector', icon: Eye, label: 'Read-Only Hex Inspector' },
+  { href: '/faris', icon: FolderLock, label: 'FARIS Deep Recovery' },
+  { href: '/history', icon: FileCheck2, label: 'Case Reports & Chain of Custody' },
+];
+
+const legacyWorkerNavItems = [
+  { href: '/individual/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/wipe', icon: Trash2, label: 'Wipe' },
   { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/history', icon: History, label: 'History & Audit' },
-  { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
 ];
 
-function getRoleFromCookie() {
-  if (typeof window === 'undefined') return 'worker';
-  const match = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : 'worker';
+function getRoleFromCookie(): string {
+  if (typeof window === 'undefined') return 'individual';
+  const roleMatch = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
+  if (roleMatch) return decodeURIComponent(roleMatch[1]);
+  const sessionMatch = document.cookie.match(/(?:^|; )session=([^;]*)/);
+  if (sessionMatch) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionMatch[1]));
+      return parsed.role || 'individual';
+    } catch {
+      return 'individual';
+    }
+  }
+  return 'individual';
 }
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const [role, setRole] = React.useState('worker');
+  const [role, setRole] = React.useState('individual');
   const [mounted, setMounted] = React.useState(false);
   const [isLocked, setIsLocked] = React.useState(false);
 
@@ -94,63 +118,129 @@ export default function AppSidebar() {
     );
   }
 
-  const isMaster = role === 'master';
-  const base_path = isMaster ? '/master' : '/worker';
-  const items = isMaster ? masterNavItems : workerNavItems;
+  let items = individualNavItems;
+  let homeHref = '/individual/dashboard';
+
+  if (role === 'government') {
+    items = governmentNavItems;
+    homeHref = '/government/dashboard';
+  } else if (role === 'forensic') {
+    items = forensicNavItems;
+    homeHref = '/forensic/dashboard';
+  } else if (role === 'worker') {
+    items = legacyWorkerNavItems;
+    homeHref = '/individual/dashboard';
+  }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
-      <TooltipProvider>
-        <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
-          <Link
-            href={`${base_path}/dashboard`}
-            onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
-            className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
-          >
-            <ShieldCheck className="h-4 w-4 transition-all group-hover:scale-110" />
-            <span className="sr-only">SecureWipe</span>
-          </Link>
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800/80 bg-[#090e1a] md:flex shadow-2xl">
+      {/* Brand Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/80">
+        <Link
+          href={homeHref}
+          onClick={(e) => handleNavClick(e, homeHref)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-600 to-blue-700 text-white shadow-lg shadow-cyan-950/50 transition-transform hover:scale-105"
+        >
+          <ShieldCheck className="h-5 w-5" />
+        </Link>
+        <div className="flex flex-col">
+          <span className="text-sm font-extrabold tracking-wider text-white">SECUREWIPE</span>
+          <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">NTRO DEFENSE PLATFORM</span>
+        </div>
+      </div>
 
-          {items.map((item) => (
-            <Tooltip key={item.href}>
-              <TooltipTrigger asChild>
-                <Link
-                  href={item.href}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8',
-                    (pathname === item.href || pathname.startsWith(`${item.href}/`)) && 'bg-accent text-accent-foreground',
-                    isLocked && item.href !== '/faris' && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span className="sr-only">{item.label}</span>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {isLocked && item.href !== '/faris' ? `${item.label} (Locked during recovery)` : item.label}
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </nav>
-        <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
-          <Tooltip>
-            <TooltipTrigger asChild>
+      <TooltipProvider>
+        {/* Nav Items */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 px-3 mb-2 font-semibold">
+              Operational Workspace
+            </div>
+            <nav className="space-y-1">
+              {items.map((item) => {
+                const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={(e) => handleNavClick(e, item.href)}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all group',
+                      isActive
+                        ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 shadow-sm font-semibold'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80',
+                      isLocked && item.href !== '/faris' && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <item.icon className={cn('h-4 w-4 shrink-0 transition-transform group-hover:scale-110', isActive ? 'text-cyan-400' : 'text-slate-400')} />
+                    <span className="truncate">{item.label}</span>
+                    {isActive && (
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80" />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 px-3 mb-2 font-semibold">
+              Direct Switch
+            </div>
+            <nav className="space-y-1">
               <Link
-                href="#"
-                onClick={(e) => handleNavClick(e, '#')}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8",
-                  isLocked && "opacity-60 cursor-not-allowed"
-                )}
+                href="/individual/dashboard"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all"
               >
-                <Settings className="h-5 w-5" />
-                <span className="sr-only">Settings</span>
+                <LayoutDashboard className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Individual User</span>
               </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Settings</TooltipContent>
-          </Tooltip>
-        </nav>
+              <Link
+                href="/government/dashboard"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all"
+              >
+                <Building2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Government Fleet</span>
+              </Link>
+              <Link
+                href="/forensic/dashboard"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all"
+              >
+                <Search className="h-3.5 w-3.5 text-amber-400" />
+                <span>Forensic Workbench</span>
+              </Link>
+            </nav>
+          </div>
+        </div>
+
+        {/* Bottom Operator Profile Card */}
+        <div className="p-3 border-t border-slate-800/80 bg-[#060A12]/80">
+          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="relative">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-cyan-400">
+                  {role.slice(0, 2).toUpperCase()}
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#090e1a]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-white truncate">
+                  {role === 'government' ? 'gov_officer' : role === 'forensic' ? 'forensic_analyst' : 'citizen_user'}
+                </div>
+                <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider truncate">
+                  {role}
+                </div>
+              </div>
+            </div>
+            <Link
+              href="/login"
+              title="Switch Persona / Sign Out"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
       </TooltipProvider>
     </aside>
   );

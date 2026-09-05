@@ -32,27 +32,27 @@
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
-    --popover: 224 71% 4%;
-    --popover-foreground: 213 31% 91%;
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 40% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 40% 10%;
+    --popover-foreground: 210 40% 98%;
     --primary: 217 91% 60%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 222 47% 11%;
-    --secondary-foreground: 213 31% 91%;
-    --muted: 223 47% 11%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 166 72% 40%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 70%;
+    --accent: 199 89% 48%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
+    --border: 217 33% 18%;
+    --input: 217 33% 18%;
     --ring: 217 91% 60%;
     --chart-1: 217 91% 60%;
-    --chart-2: 166 72% 40%;
+    --chart-2: 160 84% 39%;
     --chart-3: 262 83% 58%;
     --chart-4: 43 96% 56%;
     --chart-5: 0 72% 51%;
@@ -147,4 +147,30 @@
 
 .status-online {
   animation: statusPulse 2s ease-in-out infinite;
+}
+
+/* Enterprise Defense UI Tokens */
+.enterprise-card {
+  background-color: #0d1527;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+}
+
+.enterprise-card-header {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.2) 100%);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.enterprise-table-head {
+  background-color: #090e1a;
+  color: #94a3b8;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.enterprise-subtle-glow {
+  box-shadow: 0 0 35px -5px rgba(56, 189, 248, 0.08);
 }

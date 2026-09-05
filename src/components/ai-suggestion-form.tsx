@@ -31,7 +31,7 @@ const formSchema = z.object({
 });
 
 export default function AiSuggestionForm() {
-  const [state, formAction] = useFormState(suggestWipeMethodAction, initialState);
+  const [state, formAction] = useFormState(suggestWipeMethodAction as any, initialState as any);
   const [isPending, setIsPending] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -47,7 +47,7 @@ export default function AiSuggestionForm() {
     const formData = new FormData();
     formData.append("dataType", values.dataType);
     formData.append("securityLevel", values.securityLevel);
-    await formAction(formData);
+    await (formAction as any)(formData);
     setIsPending(false);
   };
 

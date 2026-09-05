@@ -4,3 +4,6 @@ node_modules/
 
 __pycache__/
 *.pyc
+*.db
+backend/data/*.db
+safe_test_sandbox/
