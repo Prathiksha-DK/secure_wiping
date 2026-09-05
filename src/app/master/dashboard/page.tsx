@@ -24,7 +24,6 @@ import {
   XCircle,
   Loader2,
   Trash2,
-  Undo,
   History,
   Activity,
   Usb,
@@ -149,19 +148,6 @@ export default function MasterDashboardPage() {
             <p className="text-xs text-muted-foreground">Inspect detected block devices, SSDs, HDDs, and USBs.</p>
             <Button size="sm" className="w-full mt-2" asChild>
               <Link href="/dashboard">View Devices ({devices.length})</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:border-primary/50 transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">Decrypt & Restore</CardTitle>
-            <Undo className="h-5 w-5 text-emerald-500" />
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Recover or decrypt device data from encrypted backup.</p>
-            <Button size="sm" className="w-full mt-2" asChild>
-              <Link href="/restore">Launch Restore</Link>
             </Button>
           </CardContent>
         </Card>

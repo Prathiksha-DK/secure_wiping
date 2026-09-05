@@ -225,202 +225,64 @@ function WipePageComponent() {
   const handleStartWipe = async () => {
     if (!selectedDeviceDetails || !determinedMethod) return;
 
-    // Use device type from /api/devices as primary indicator
-    const isUsbType = (selectedDeviceDetails as any).type === 'USB' || (selectedDeviceDetails as any).type === 'USB Drive';
+    setStep(3);
+    setIsWiping(true);
+    setProgress(0);
+    setWipeComplete(false);
+    setWipeSuccess(false);
+    setReportId(null);
 
-    // Cross-check against pendrives list — only small FAT32 removable drives (<64 GB, non-NTFS)
-    let matchedPendrive = null;
-    if (isUsbType) {
-      matchedPendrive = pendrives.find(p => p.size_gb < 64 && p.fstype !== 'NTFS');
-    }
+    const method = wipeMethodDetails[determinedMethod] || defaultMethod;
+    setLogs([
+      `[START] Wipe initiated for: ${selectedDeviceDetails.name}`,
+      `[INFO] Standard: ${method.standard}`,
+      `[INFO] Method: ${method.name} (${method.passCount})`,
+      `[INFO] Connecting to device...`,
+    ]);
 
-    if (isUsbType && matchedPendrive) {
-      // --------------------------------------------------
-      // Route A: USB / Removable drive -> port 8743
-      // --------------------------------------------------
-      const targetDevice = matchedPendrive.device.toUpperCase();
-      // Hard safety: never allow C:, D: or NTFS volumes
-      if (
-        targetDevice.startsWith("C:") ||
-        targetDevice.startsWith("D:") ||
-        matchedPendrive.fstype === 'NTFS' ||
-        matchedPendrive.size_gb > 64
-      ) {
-        toast({
-          title: "Safety Block",
-          description: `Operation aborted: ${matchedPendrive.device} is an internal drive.`,
-          variant: "destructive"
-        });
-        return;
+    const progressInterval = setInterval(() => {
+      setProgress(p => Math.min(p + 1, 99));
+    }, 200);
+
+    try {
+      const isBombMode = determinedMethod === 'bomb-mode';
+      const wipeEndpoint = isBombMode ? `${API_BASE}/api/bomb-wipe` : `${API_BASE}/api/wipe`;
+      setLogs(prev => [...prev, `[INFO] Sending ${isBombMode ? 'BOMB MODE' : 'wipe'} command to API...`]);
+      const response = await fetch(wipeEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device: selectedDeviceDetails.name, method: determinedMethod }),
+      });
+
+      const result = await response.json();
+      clearInterval(progressInterval);
+
+      if (!response.ok || result.status !== 'success') {
+        throw new Error(result.message || "Wipe operation failed");
       }
 
-      setStep(3);
-      setIsWiping(true);
-      setProgress(0);
-      setWipeComplete(false);
-      setWipeSuccess(false);
-      setReportId(null);
-      setLogs([`[START] Initiating Pendrive Boom Wipe for ${matchedPendrive.name} on port 8743...`]);
-
-      try {
-        const res = await fetch('http://localhost:8743/wipe-pendrive', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // "E:/" bypasses the broken name-match in backend get_device_path (line 69)
-          // and hits the fallback at line 76 which correctly returns \\.\E:
-          body: JSON.stringify({ device: matchedPendrive.device.replace(/\\/g, '/') })
-        });
-
-        const data = await res.json();
-        if (!res.ok || data.status !== 'success') {
-          throw new Error(data.message || "Failed to start wipe on port 8743");
-        }
-
-        const wipeId = data.wipe_id;
-        setLogs(prev => [...prev, `[OK] Detonation triggered. Wipe ID: ${wipeId}`]);
-        setLogs(prev => [...prev, `[INFO] Polling progress...`]);
-
-        // Start polling
-        const pollInterval = setInterval(async () => {
-          try {
-            const statusRes = await fetch(`http://localhost:8743/wipe-status/${wipeId}`, { cache: 'no-store' });
-            if (statusRes.ok) {
-              const statusData = await statusRes.json();
-              if (statusData.status === 'success' && statusData.wipe_status) {
-                const s = statusData.wipe_status;
-                const STATUS_LABELS: Record<string, string> = {
-                  initializing: 'Initializing...',
-                  scanning:     'Scanning files...',
-                  erasing:      'Erasing files (DoD 3-Pass)',
-                  formatting:   'Formatting drive...',
-                  placing_bombs:'Erasing...',
-                  completed:    'Completed',
-                  failed:       'Failed',
-                };
-                const label = STATUS_LABELS[s.status] || s.status.replace(/_/g, ' ').toUpperCase();
-                const fileInfo = s.total_files
-                  ? ` | ${s.wiped_files ?? 0}/${s.total_files} files`
-                  : '';
-                const prog = Math.round(s.progress || 0);
-                setProgress(prog);
-                setLogs(prev => [
-                  ...prev.slice(0, 4),
-                  `[STATUS] ${label}${fileInfo} | Progress: ${prog}%`
-                ]);
-
-                if (s.status === 'completed' || s.status === 'failed') {
-                  clearInterval(pollInterval);
-                  setIsWiping(false);
-                  setWipeComplete(true);
-                  
-                  if (s.status === 'completed') {
-                    setWipeSuccess(true);
-                    setProgress(100);
-                    // Register in SQLite history db on port 9758
-                    try {
-                      const dbRegRes = await fetch(`${API_BASE}/api/verify-and-send`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          deviceName: selectedDeviceDetails.name,
-                          wipeMethod: determinedMethod,
-                          receiverEmail: "worker@example.com",
-                          deviceSerial: `SN-USB-${wipeId.substring(14, 22)}`,
-                          deviceType: 'USB Drive'
-                        })
-                      });
-                      const dbRegData = await dbRegRes.json();
-                      if (dbRegRes.ok && dbRegData.success) {
-                        setReportId(dbRegData.certificate.reportId);
-                        setLogs(prev => [...prev, `[OK] Sanitization certificate generated: ${dbRegData.certificate.reportId}`]);
-                      }
-                    } catch (dbErr) {
-                      console.error("Failed to register certificate in history db:", dbErr);
-                    }
-                  } else {
-                    setWipeSuccess(false);
-                    setLogs(prev => [...prev, `[ERROR] Wipe failed: ${s.error || 'Unknown error'}`]);
-                  }
-                }
-              }
-            }
-          } catch (pollErr: any) {
-            console.error("Polling error:", pollErr);
-          }
-        }, 1000);
-
-      } catch (err: any) {
-        setIsWiping(false);
-        setLogs(prev => [...prev, `[ERROR] ${err.message}`]);
-        toast({
-          variant: "destructive",
-          title: "Pendrive Wipe Failed",
-          description: err.message
-        });
-      }
-    } else {
-      // --------------------------------------------------
-      // Route B: Internal SSD/HDD -> port 9758 (Original Flow)
-      // --------------------------------------------------
-      setStep(3);
-      setIsWiping(true);
-      setProgress(0);
-      setWipeComplete(false);
-      setWipeSuccess(false);
-      setReportId(null);
-
-      const method = wipeMethodDetails[determinedMethod] || defaultMethod;
-      setLogs([
-        `[START] Wipe initiated for: ${selectedDeviceDetails.name}`,
-        `[INFO] Standard: ${method.standard}`,
-        `[INFO] Method: ${method.name} (${method.passCount})`,
-        `[INFO] Connecting to device...`,
+      setWipeSuccess(true);
+      setReportId(result.reportId || null);
+      setLogs(prev => [
+        ...prev,
+        `[OK] ${result.message}`,
+        `[OK] Verification complete. Certificate ID: ${result.reportId || 'N/A'}`,
+        `[DONE] All operations completed successfully.`,
       ]);
 
-      const progressInterval = setInterval(() => {
-        setProgress(p => Math.min(p + 1, 99));
-      }, 200);
-
-      try {
-        const isBombMode = determinedMethod === 'bomb-mode';
-        const wipeEndpoint = isBombMode ? `${API_BASE}/api/bomb-wipe` : `${API_BASE}/api/wipe`;
-        setLogs(prev => [...prev, `[INFO] Sending ${isBombMode ? 'BOMB MODE' : 'wipe'} command to API...`]);
-        const response = await fetch(wipeEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device: selectedDeviceDetails.name, method: determinedMethod }),
-        });
-
-        const result = await response.json();
-        clearInterval(progressInterval);
-
-        if (!response.ok || result.status !== 'success') {
-          throw new Error(result.message || "Wipe operation failed");
-        }
-
-        setWipeSuccess(true);
-        setReportId(result.reportId || null);
-        setLogs(prev => [
-          ...prev,
-          `[OK] ${result.message}`,
-          `[OK] Verification complete. Certificate ID: ${result.reportId || 'N/A'}`,
-          `[DONE] All operations completed successfully.`,
-        ]);
-
-      } catch(e: any) {
-        clearInterval(progressInterval);
-        setWipeSuccess(false);
-        setLogs(prev => [...prev, `[ERROR] ${e.message}`]);
-        toast({
-          variant: "destructive",
-          title: "Wipe Failed",
-          description: e.message || "An unknown error occurred.",
-        });
-      } finally {
-        setProgress(100);
-        setIsWiping(false);
-        setWipeComplete(true);
-      }
+    } catch(e: any) {
+      clearInterval(progressInterval);
+      setWipeSuccess(false);
+      setLogs(prev => [...prev, `[ERROR] ${e.message}`]);
+      toast({
+        variant: "destructive",
+        title: "Wipe Failed",
+        description: e.message || "An unknown error occurred.",
+      });
+    } finally {
+      setProgress(100);
+      setIsWiping(false);
+      setWipeComplete(true);
     }
   };
 

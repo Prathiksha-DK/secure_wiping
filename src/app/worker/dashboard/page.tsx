@@ -411,18 +411,8 @@ export default function DashboardPage() {
                 </Link>
               </Button>
               <Button variant="outline" size="sm" className="justify-start" asChild>
-                <Link href="/worker/restore">
-                  <Database className="mr-2 h-4 w-4 text-amber-500" /> Decrypt & Restore
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start" asChild>
                 <Link href="/worker/history">
                   <FileClock className="mr-2 h-4 w-4 text-emerald-500" /> View History & Reports
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start" asChild>
-                <Link href="/worker/iso-mode">
-                  <Activity className="mr-2 h-4 w-4 text-purple-500" /> ISO Boot Mode
                 </Link>
               </Button>
             </CardContent>

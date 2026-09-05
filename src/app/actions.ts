@@ -1,8 +1,6 @@
 
 'use server';
 
-import {suggestWipeMethod, type SuggestWipeMethodInput} from '@/ai/flows/suggest-wipe-method';
-import { generateBlastReport, type BomberGameInput, type BomberGameOutput } from '@/ai/flows/generate-blast-report';
 import {z} from 'zod';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
@@ -27,25 +25,13 @@ export async function suggestWipeMethodAction(prevState: any, formData: FormData
   }
 
   try {
-    const result = await suggestWipeMethod(validatedFields.data as SuggestWipeMethodInput);
+    const {suggestWipeMethod} = await import('@/ai/flows/suggest-wipe-method');
+    const result = await suggestWipeMethod(validatedFields.data as any);
     return result;
   } catch (error) {
     console.error(error);
     return {
       error: 'An error occurred while getting the suggestion.',
-    };
-  }
-}
-
-export async function generateBlastReportAction(input: BomberGameInput): Promise<{ status: 'success', report: BomberGameOutput } | { status: 'error', error: string }> {
-  try {
-    const result = await generateBlastReport(input);
-    return { status: 'success' as const, report: result };
-  } catch (error) {
-    console.error(error);
-    return {
-      status: 'error' as const,
-      error: 'An error occurred while generating the blast report.',
     };
   }
 }

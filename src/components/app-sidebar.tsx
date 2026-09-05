@@ -9,12 +9,8 @@ import {
   LayoutDashboard,
   History,
   Trash2,
-  Disc3,
   Settings,
-  Undo,
   Package,
-  Bomb,
-  FileLock,
   Network,
   Eye,
   Search,
@@ -33,11 +29,7 @@ const workerNavItems = [
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/restore', icon: Undo, label: 'Decrypt & Restore' },
-  { href: '/worker/encrypt-files', icon: FileLock, label: 'Encrypt & Backup' },
   { href: '/worker/history', icon: History, label: 'History & Audit' },
-  { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
-  { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
 ];
 
 const masterNavItems = [
@@ -46,7 +38,6 @@ const masterNavItems = [
   { href: '/faris', icon: Search, label: 'FARIS Recovery' },
   { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
   { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
-  { href: '/restore', icon: Undo, label: 'Decrypt & Restore' },
   { href: '/history', icon: History, label: 'History & Audit' },
   { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
 ];

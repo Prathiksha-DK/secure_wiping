@@ -796,26 +796,51 @@ def post_inspector_compare():
 
 @app.post("/api/inspector/search")
 def post_inspector_search():
-    """Search for text or hex patterns in storage (strictly read-only)."""
+    """Unified search: raw storage byte search and filesystem-aware search (strictly read-only)."""
     try:
-        from storage_inspector import search_storage_stream
+        from storage_inspector import unified_storage_search
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
         query = body.get("query", "")
         query_type = body.get("query_type", "text")
+        search_mode = body.get("search_mode", "both")
         max_scan_bytes = int(body.get("max_scan_bytes", 50 * 1024 * 1024))
         sector_size = int(body.get("sector_size", 512))
 
         if not target or not query:
             return jsonify({"error": "Missing target or query parameter"}), 400
 
-        result = search_storage_stream(
-            target, query=query, query_type=query_type,
-            max_scan_bytes=max_scan_bytes, sector_size=sector_size
+        result = unified_storage_search(
+            target,
+            query=query,
+            query_type=query_type,
+            search_mode=search_mode,
+            max_scan_bytes=max_scan_bytes,
+            sector_size=sector_size,
         )
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.post("/api/inspector/file-details")
+def post_inspector_file_details():
+    """Retrieve full read-only metadata, preview, and optional SHA-256 for a file or folder."""
+    try:
+        from storage_inspector import get_file_details
+        body = request.get_json(silent=True) or {}
+        path = body.get("path") or body.get("file_path", "")
+        compute_hash = bool(body.get("compute_hash", False))
+
+        if not path:
+            return jsonify({"error": "Missing path parameter"}), 400
+
+        target_device = body.get("target_device") or body.get("target")
+        result = get_file_details(file_path=path, compute_hash=compute_hash, target_device=target_device)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 @app.post("/api/inspector/export")
