@@ -25,7 +25,6 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
 from devices import list_devices
-from secure_backup import encrypt_backup_and_wipe, decrypt_and_restore
 from secure_encrypt_wipe import encrypt_and_wipe
 from user_storage import init_db, insert_user, get_user_by_username
 
@@ -838,57 +837,6 @@ def post_fs_picker():
     if selected_path:
         return jsonify({"status": "selected", "path": selected_path}), 200
     return jsonify({"status": "cancelled", "path": ""}), 200
-
-# ---------------------------------------------------------------------------
-# API: Backup & Encrypt-and-Wipe
-# ---------------------------------------------------------------------------
-@app.post("/api/encrypt-and-wipe")
-@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
-def post_encrypt_and_wipe():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("device")
-        if not device_name:
-            return jsonify({"status": "error", "message": "Missing 'device' in request body"}), 400
-
-        ok, msg = encrypt_backup_and_wipe(device_name)
-        if ok:
-            record_id = f"WIPE-{_uuid.uuid4().hex[:8].upper()}"
-            now = time.strftime("%Y-%m-%d %H:%M:%S")
-            _insert_history({
-                "id": record_id,
-                "device": device_name,
-                "method": "crypto-erase",
-                "status": "Completed",
-                "standard": "AES-256 Cryptographic Erasure",
-                "startTime": now,
-                "endTime": now,
-                "filesVerified": 1,
-                "verificationHash": hashlib.sha256(msg.encode()).hexdigest(),
-                "finalState": "SANITIZED_AND_REUSABLE",
-            })
-            return jsonify({"status": "success", "message": msg, "reportId": record_id}), 200
-        else:
-            return jsonify({"status": "error", "message": msg}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.post("/api/decrypt-and-restore")
-@require_auth(allowed_roles=[ROLE_ADMINISTRATOR, ROLE_OPERATOR])
-def post_decrypt_and_restore():
-    try:
-        body = request.get_json(silent=True) or {}
-        device_name = body.get("device")
-        key_hex = body.get("decryptionKey")
-        if not device_name or not key_hex:
-            return jsonify({"status": "error", "message": "Missing 'device' or 'decryptionKey'"}), 400
-        ok, msg = decrypt_and_restore(device_name, key_hex)
-        if ok:
-            return jsonify({"status": "success", "message": msg}), 200
-        else:
-            return jsonify({"status": "error", "message": msg}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
 
 # ---------------------------------------------------------------------------
 # API: System Status & Dashboard Stats

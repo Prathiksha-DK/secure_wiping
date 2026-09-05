@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     // Otherwise, we use a standard method.
     let method;
     if (device.includes('Primary SSD')) {
-      method = 'encrypt-and-wipe';
+      method = 'crypto';
     } else if (device.includes('HDD')) {
       method = 'dod'; // DoD 3-Pass is good for HDDs
     } else {

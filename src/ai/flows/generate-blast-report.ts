@@ -21,7 +21,7 @@ const BomberGameOutputSchema = z.object({
   patternCategory: z.string().describe("A short classification of the blast pattern, like 'Surgical Strike', 'Cluster Formation', 'Scattered Extraction', or 'Clean Diagonal'."),
   dataAssessment: z.string().describe("An inventive, plausible-sounding purpose for the extracted binary data (e.g., 'Fragments of an encrypted enemy communication key' or 'A partial schematic for a new power core')."),
   missionSuccess: z.enum(["Low", "Medium", "High"]).describe("A rating of the overall success of the data extraction operation. Base this on the number of bombs used vs. the amount of data extracted."),
-  recommendation: z.string().describe("A concluding sentence on next steps (e.g., 'Recommend immediate decryption.' or 'Further extraction runs are required to complete the dataset.')."),
+  recommendation: z.string().describe("A concluding sentence on next steps (e.g., 'Recommend immediate forensic verification.' or 'Further sanitization passes are required to complete eradication.')."),
 });
 export type BomberGameOutput = z.infer<typeof BomberGameOutputSchema>;
 

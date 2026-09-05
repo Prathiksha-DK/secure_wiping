@@ -31,7 +31,10 @@ import {
   AlertTriangle,
   Search,
   Eye,
-  Gamepad2,
+  ArrowRight,
+  Shield,
+  Layers,
+  Sparkles
 } from "lucide-react";
 
 const API_BASE = "http://localhost:9758";
@@ -107,7 +110,10 @@ export default function MasterDashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-xs text-muted-foreground">Loading master dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -116,202 +122,240 @@ export default function MasterDashboardPage() {
   const completed = stats?.completed || 0;
   const warning = stats?.warning || 0;
   const failed = stats?.failed || 0;
-  const complianceRate = stats?.complianceRate ?? (totalWipes > 0 ? Math.round((completed / totalWipes) * 100) : 100);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Sanitization Operations Dashboard</h1>
-        <p className="text-muted-foreground">
-          Adaptive Sanitization & Forensic Recovery Verification Platform
-        </p>
+    <div className="space-y-6 w-full min-w-0 max-w-full animate-fade-in">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="outline" className="text-primary border-primary/30 bg-primary/5 text-xs font-semibold">
+              Master Operations Console
+            </Badge>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            Sanitization Operations Dashboard
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Enterprise Data Sanitization &amp; Forensic Verification Control Center
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" className="gap-1.5 shadow-sm bg-primary">
+            <Link href="/wipe">
+              <Shield className="h-4 w-4" /> Start Secure Wipe
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Assurance State Metrics Bar */}
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-4 border shadow-sm">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Total Sessions</span>
+            <Activity className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-black">{totalWipes}</div>
+          <p className="text-[11px] text-muted-foreground mt-1">Audit log records</p>
+        </Card>
+
+        <Card className="p-4 border shadow-sm">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Sanitized (Passed)</span>
+            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
+            {completed}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">100% Zero-remnant verified</p>
+        </Card>
+
+        <Card className="p-4 border shadow-sm">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Policy Review</span>
+            <ShieldAlert className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
+            {warning}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">Requires supervisor audit</p>
+        </Card>
+
+        <Card className="p-4 border shadow-sm">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Controlled Disposal</span>
+            <ShieldX className="h-4 w-4 text-destructive" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-destructive">
+            {failed}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">Non-sanitizable hardware</p>
+        </Card>
       </div>
 
       {/* Quick Launchers */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover:border-primary/50 transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">Adaptive Wiper</CardTitle>
-            <Trash2 className="h-5 w-5 text-destructive" />
+        <Card className="hover:border-primary/50 transition duration-200">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold">Secure Wiper</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
+              <Trash2 className="h-4 w-4" />
+            </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Sanitize files, folders, or physical drives with DoD/NIST protocols.</p>
-            <Button size="sm" className="w-full mt-2" asChild>
+          <CardContent className="p-4 pt-0 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Execute NIST SP 800-88 Purge, DoD 5220.22-M, and IEEE 2883 standards.
+            </p>
+            <Button size="sm" variant="outline" className="w-full text-xs" asChild>
               <Link href="/wipe">Launch Wiper</Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="hover:border-primary/50 transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">Connected Storage</CardTitle>
-            <HardDrive className="h-5 w-5 text-primary" />
+        <Card className="hover:border-primary/50 transition duration-200">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold">FARIS Recovery</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+              <Search className="h-4 w-4" />
+            </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Inspect detected block devices, SSDs, HDDs, and USBs.</p>
-            <Button size="sm" className="w-full mt-2" asChild>
-              <Link href="/dashboard">View Devices ({devices.length})</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:border-primary/50 transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">FARIS Recovery</CardTitle>
-            <Search className="h-5 w-5 text-emerald-500" />
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Perform forensic residual analysis and data reconstruction.</p>
-            <Button size="sm" className="w-full mt-2" asChild>
+          <CardContent className="p-4 pt-0 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Deep forensic residual signature analysis &amp; multi-engine verification.
+            </p>
+            <Button size="sm" variant="outline" className="w-full text-xs" asChild>
               <Link href="/faris">Launch FARIS</Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="hover:border-primary/50 transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold">Audit Certificates</CardTitle>
-            <History className="h-5 w-5 text-amber-500" />
+        <Card className="hover:border-primary/50 transition duration-200">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold">Storage Inspector</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 text-cyan-600 flex items-center justify-center">
+              <Eye className="h-4 w-4" />
+            </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">View verified certificates with tamper-evident hashes.</p>
-            <Button size="sm" className="w-full mt-2" asChild>
+          <CardContent className="p-4 pt-0 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Read-only sector preview, raw hex dump, and partition structure inspection.
+            </p>
+            <Button size="sm" variant="outline" className="w-full text-xs" asChild>
+              <Link href="/inspector">Open Inspector</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:border-primary/50 transition duration-200">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold">Audit &amp; Certificates</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
+              <History className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Tamper-evident logs and asymmetric RSA-PSS digitally signed certificates.
+            </p>
+            <Button size="sm" variant="outline" className="w-full text-xs" asChild>
               <Link href="/history">View Audit Log</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* Assurance State Stats */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="glow-primary">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Operations</CardTitle>
-            <Activity className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{totalWipes}</div>
-            <p className="text-xs text-muted-foreground mt-1">Audit sessions recorded</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Reusable (Passed)</CardTitle>
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-500">{completed}</div>
-            <p className="text-xs text-muted-foreground mt-1">Verified & reusable</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Policy Review</CardTitle>
-            <ShieldAlert className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-500">{warning}</div>
-            <p className="text-xs text-muted-foreground mt-1">NAND / not verifiable</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Controlled Disposal</CardTitle>
-            <ShieldX className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-destructive">{failed}</div>
-            <p className="text-xs text-muted-foreground mt-1">Non-sanitizable</p>
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* Main Grid: Workstation Status + Storage Devices */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Host Station Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Server className="h-5 w-5 text-primary" />
-              Workstation & Node Status
+        {/* Workstation & Node Status */}
+        <Card className="border">
+          <CardHeader className="p-5 pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-bold">
+              <Server className="h-4 w-4 text-primary" />
+              Workstation &amp; Node Status
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="p-5 pt-0 space-y-4">
             {systemStatus ? (
               <>
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 status-online" />
-                  <span className="font-semibold">{systemStatus.status}</span>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                    {systemStatus.status || "Operational & Ready"}
+                  </span>
                 </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex justify-between border-b pb-1.5">
                     <span className="text-muted-foreground">Hostname</span>
-                    <span className="font-mono text-xs font-semibold">{systemStatus.hostname}</span>
+                    <span className="font-mono font-semibold">{systemStatus.hostname}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between border-b pb-1.5">
                     <span className="text-muted-foreground">Platform / OS</span>
-                    <span className="text-xs">{systemStatus.os}</span>
+                    <span className="font-medium">{systemStatus.os}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between border-b pb-1.5">
                     <span className="text-muted-foreground">Framework Version</span>
-                    <span className="text-xs font-mono">v1.0.0 (NTRO/Govt)</span>
+                    <span className="font-mono font-semibold">Enterprise Edition v2.0</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">System Clock</span>
-                    <span className="text-xs font-mono">{systemStatus.timestamp}</span>
+                    <span className="font-mono text-muted-foreground">{systemStatus.timestamp}</span>
                   </div>
                 </div>
               </>
             ) : (
-              <p className="text-muted-foreground text-sm">System status loading...</p>
+              <p className="text-muted-foreground text-xs py-4">System status loading...</p>
             )}
           </CardContent>
         </Card>
 
         {/* Detected Storage Devices */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                <HardDrive className="h-5 w-5 text-primary" />
-                Detected Storage Devices
-              </div>
-              <Badge variant="outline">{devices.length} Connected</Badge>
-            </CardTitle>
+        <Card className="lg:col-span-2 border">
+          <CardHeader className="p-5 pb-3 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base font-bold">Detected Storage Devices</CardTitle>
+            </div>
+            <Badge variant="outline" className="text-xs font-semibold">
+              {devices.length} Connected
+            </Badge>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-5 pt-0">
             {devices.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground text-sm">
-                No external storage devices detected.
+              <div className="text-center py-8 text-muted-foreground text-xs space-y-1">
+                <HardDrive className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="font-medium">No external storage devices detected.</p>
+                <p className="text-[11px]">Connect a USB drive, SSD, or external storage device to begin.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
                 {devices.map((dev) => (
-                  <div key={dev.name} className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
-                    <div className="flex items-center gap-3">
+                  <div
+                    key={dev.name}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border bg-muted/20 gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
                       {dev.type === "USB" ? (
-                        <Usb className="h-5 w-5 text-primary flex-shrink-0" />
+                        <Usb className="h-5 w-5 text-primary shrink-0" />
                       ) : dev.type === "SSD" ? (
-                        <Cpu className="h-5 w-5 text-primary flex-shrink-0" />
+                        <Cpu className="h-5 w-5 text-primary shrink-0" />
                       ) : (
-                        <HardDrive className="h-5 w-5 text-primary flex-shrink-0" />
+                        <HardDrive className="h-5 w-5 text-primary shrink-0" />
                       )}
-                      <div>
-                        <p className="font-semibold text-sm">{dev.friendlyName || dev.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-xs truncate">{dev.friendlyName || dev.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
                           {dev.size} · {dev.type} {dev.serial ? `· SN: ${dev.serial}` : ""}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                       {dev.isSystem && (
                         <Badge variant="destructive" className="text-[10px]">
                           OS Boot Disk
                         </Badge>
                       )}
-                      <Button size="sm" variant="outline" asChild>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
                         <Link href={`/wipe?device=${encodeURIComponent(dev.name)}`}>Sanitize</Link>
                       </Button>
                     </div>
@@ -324,65 +368,69 @@ export default function MasterDashboardPage() {
       </div>
 
       {/* Recent Sanitization Audit Log */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="h-5 w-5 text-primary" />
+      <Card className="border">
+        <CardHeader className="p-5 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base font-bold">
+              <History className="h-4 w-4 text-primary" />
               Recent Sanitization Sessions
-            </div>
-            <Button size="sm" variant="ghost" asChild>
-              <Link href="/history">View All</Link>
-            </Button>
-          </CardTitle>
-          <CardDescription>
-            Audit log of completed sanitization passes and recovery assessments.
-          </CardDescription>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Audit log of completed sanitization passes and forensic residual checks.
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="ghost" className="text-xs h-8 gap-1" asChild>
+            <Link href="/history">
+              View All <ArrowRight className="h-3 w-3" />
+            </Link>
+          </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {!stats?.recentWipes || stats.recentWipes.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground text-sm">
+            <div className="text-center py-8 text-muted-foreground text-xs">
               No recent sanitization sessions recorded.
             </div>
           ) : (
-            <div className="rounded-lg border overflow-x-auto min-w-0">
-              <table className="w-full text-sm min-w-[600px]">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-xs min-w-[620px]">
                 <thead>
-                  <tr className="bg-muted/50 text-xs">
-                    <th className="text-left p-3 font-medium">Session ID</th>
-                    <th className="text-left p-3 font-medium">Target</th>
-                    <th className="text-left p-3 font-medium">Standard / Method</th>
-                    <th className="text-left p-3 font-medium">Assurance State</th>
-                    <th className="text-left p-3 font-medium">Timestamp</th>
-                    <th className="text-right p-3 font-medium">Action</th>
+                  <tr className="border-b bg-muted/40 text-muted-foreground">
+                    <th className="text-left p-3 font-semibold">Session ID</th>
+                    <th className="text-left p-3 font-semibold">Target Drive</th>
+                    <th className="text-left p-3 font-semibold">Sanitization Standard</th>
+                    <th className="text-left p-3 font-semibold">Assurance State</th>
+                    <th className="text-left p-3 font-semibold">Timestamp</th>
+                    <th className="text-right p-3 font-semibold">Report</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y">
                   {stats.recentWipes.map((w) => (
-                    <tr key={w.id} className="border-t hover:bg-muted/30">
-                      <td className="p-3 font-mono font-semibold text-primary text-xs">{w.id}</td>
-                      <td className="p-3 font-medium text-xs truncate max-w-[180px]">{w.device}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{w.standard || w.method}</td>
-                      <td className="p-3 text-xs">
+                    <tr key={w.id} className="hover:bg-muted/30 transition">
+                      <td className="p-3 font-mono font-bold text-primary">{w.id}</td>
+                      <td className="p-3 font-medium truncate max-w-[160px]">{w.device}</td>
+                      <td className="p-3 text-muted-foreground">{w.standard || w.method}</td>
+                      <td className="p-3">
                         {w.finalState === "SANITIZED_AND_REUSABLE" || w.status === "Completed" ? (
-                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300">
-                            🟢 Reusable
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 text-[10px]">
+                            ✓ Reusable
                           </Badge>
                         ) : w.finalState === "SANITIZATION_NOT_VERIFIABLE" || w.status === "Warning" ? (
-                          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-300">
-                            🟡 Review Required
+                          <Badge variant="outline" className="bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 text-[10px]">
+                            ⚠ Review Required
                           </Badge>
                         ) : (
-                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border-red-300">
-                            🔴 Disposal
+                          <Badge variant="destructive" className="text-[10px]">
+                            ✕ Disposal
                           </Badge>
                         )}
                       </td>
-                      <td className="p-3 text-xs text-muted-foreground">{w.endTime || w.startTime}</td>
+                      <td className="p-3 text-muted-foreground">{w.endTime || w.startTime}</td>
                       <td className="p-3 text-right">
-                        <Button size="sm" variant="ghost" asChild>
-                          <Link href={`/report/${w.id}`}>Certificate</Link>
-                        </Button>
+                        <Link href={`/report/${w.id}`}>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] px-2.5">
+                            Certificate
+                          </Button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -395,3 +443,4 @@ export default function MasterDashboardPage() {
     </div>
   );
 }
+

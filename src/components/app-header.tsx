@@ -1,28 +1,23 @@
 
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ShieldCheck,
   PanelLeft,
   Search,
-  LayoutDashboard,
-  History,
-  Trash2,
-  Disc3,
-  Settings,
-  Undo,
   LogOut,
-  Package,
-  Bomb,
-  FileLock,
-  Network,
-  Eye,
+  Settings,
+  Lock,
+  User
 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -44,33 +39,12 @@ import {
   BreadcrumbPage,
 } from '@/components/ui/breadcrumb';
 import { ThemeToggle } from '@/components/theme-toggle';
-import React from 'react';
 import { logout } from '@/app/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
-import { Gamepad2 } from 'lucide-react';
-
-const workerNavItems = [
-  { href: '/worker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/worker/wipe', icon: Trash2, label: 'Wipe' },
-  { href: '/worker/history', icon: History, label: 'History & Audit' },
-  { href: '/iso-mode', icon: Disc3, label: 'ISO Mode' },
-  { href: '/worker/bomber-game', icon: Bomb, label: 'Bomber Game' },
-];
-
-const masterNavItems = [
-  { href: '/master/dashboard', icon: LayoutDashboard, label: 'Master Control Panel' },
-  { href: '/faris', icon: Search, label: 'FARIS Recovery' },
-  { href: '/swarm', icon: Gamepad2, label: 'Fragment Hunter (Swarm Game)' },
-  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
-  { href: '/dashboard', icon: ShieldCheck, label: 'Local Devices' },
-  { href: '/wipe', icon: Trash2, label: 'Secure Wipe' },
-  { href: '/history', icon: History, label: 'History & Audit' },
-  { href: '/master/cart', icon: Package, label: 'Hardware Shop' },
-];
+import { workerNavItems, masterNavItems } from '@/components/app-sidebar';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 function getRoleFromCookie() {
   if (typeof window === 'undefined') return 'worker';
@@ -115,7 +89,7 @@ export default function AppHeader() {
 
   if (!mounted) {
     return (
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6"></header>
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/80 backdrop-blur-md px-4 sm:px-6"></header>
     );
   }
 
@@ -124,59 +98,101 @@ export default function AppHeader() {
   const base_path = isMaster ? '/master' : '/worker';
 
   return (
-    <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+    <header className="sticky top-0 z-20 flex h-14 w-full items-center justify-between gap-2 border-b bg-background/90 backdrop-blur-md px-3 sm:px-6">
+      {/* Left: Mobile Drawer Trigger & Breadcrumbs */}
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button size="icon" variant="outline" className="sm:hidden">
+            <Button size="icon" variant="ghost" className="md:hidden shrink-0 h-9 w-9">
               <PanelLeft className="h-5 w-5" />
               <span className="sr-only">Toggle Menu</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="sm:max-w-xs">
-            <nav className="grid gap-6 text-lg font-medium">
-              <Link
-                href={`${base_path}/dashboard`}
-                onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
-                className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
-              >
-                <ShieldCheck className="h-5 w-5 transition-all group-hover:scale-110" />
-                <span className="sr-only">SecureWipe</span>
-              </Link>
-              {items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              ))}
-               <Link
-                  href="#"
-                  onClick={(e) => handleNavClick(e, '#')}
-                  className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <Settings className="h-5 w-5" />
-                  Settings
-                </Link>
+          <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
+            <SheetHeader className="p-4 border-b text-left">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-primary to-blue-600 text-primary-foreground shadow-sm">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <SheetTitle className="text-base font-bold">SecureWipe</SheetTitle>
+                  <p className="text-[11px] text-muted-foreground uppercase font-medium">
+                    {isMaster ? 'Master Control' : 'Operator Suite'}
+                  </p>
+                </div>
+              </div>
+            </SheetHeader>
+
+            {isLocked && (
+              <div className="m-3 p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5 animate-pulse shrink-0" />
+                <span className="text-[11px] font-medium">Forensic Recovery in progress</span>
+              </div>
+            )}
+
+            <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
+              {items.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== '/dashboard' &&
+                    item.href !== '/master/dashboard' &&
+                    item.href !== '/worker/dashboard' &&
+                    pathname.startsWith(`${item.href}/`));
+
+                const isItemLocked = isLocked && item.href !== '/faris';
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={(e) => handleNavClick(e, item.href)}
+                    className={cn(
+                      'flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      isItemLocked && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </div>
+                    {isItemLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                  </Link>
+                );
+              })}
             </nav>
+
+            <div className="p-3 border-t mt-auto">
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-2 py-1">
+                <span>Account Mode:</span>
+                <Badge variant="outline" className="text-[10px] uppercase font-bold">
+                  {role}
+                </Badge>
+              </div>
+            </div>
           </SheetContent>
         </Sheet>
-        <Breadcrumb className="hidden md:flex">
-          <BreadcrumbList>
+
+        <Breadcrumb className="hidden sm:flex min-w-0">
+          <BreadcrumbList className="text-xs">
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href={`${base_path}/dashboard`} onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}>Dashboard</Link>
+                <Link
+                  href={`${base_path}/dashboard`}
+                  onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
+                  className="font-medium"
+                >
+                  Dashboard
+                </Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
-            {pathSegments.slice(1).map((segment, index) => (
+            {pathSegments.slice(1).map((segment) => (
               <React.Fragment key={segment}>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="capitalize">
+                  <BreadcrumbPage className="capitalize truncate max-w-[120px]">
                     {segment.replace(/-/g, ' ')}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
@@ -184,21 +200,27 @@ export default function AppHeader() {
             ))}
           </BreadcrumbList>
         </Breadcrumb>
-        <div className="relative ml-auto flex-1 md:grow-0">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      </div>
+
+      {/* Right: Search & Actions */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             type="search"
             placeholder="Search..."
-            className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[336px]"
+            className="h-8 w-28 sm:w-44 md:w-56 pl-8 pr-2 text-xs rounded-lg bg-muted/40 focus:bg-background transition-all"
           />
         </div>
+
         <ThemeToggle />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="overflow-hidden rounded-full"
+              className="h-8 w-8 rounded-full overflow-hidden shrink-0 border"
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
@@ -207,23 +229,37 @@ export default function AppHeader() {
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{isMaster ? 'Master Account' : 'Worker Account'}</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-xs font-bold">{isMaster ? 'Master Control' : 'Operator Session'}</p>
+                <p className="text-[11px] text-muted-foreground font-mono">{role}@securewipe.local</p>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Support</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`${base_path}/dashboard`} className="text-xs cursor-pointer">
+                Console Dashboard
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/history" className="text-xs cursor-pointer">
+                Audit History
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <form action={logout} className="w-full">
-                <button type="submit" className="w-full text-left flex items-center">
-                  <LogOut className="mr-2 h-4 w-4" />
+                <button type="submit" className="w-full text-left flex items-center text-xs text-destructive">
+                  <LogOut className="mr-2 h-3.5 w-3.5" />
                   Logout
                 </button>
               </form>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </header>
-    </>
+      </div>
+    </header>
   );
 }
+

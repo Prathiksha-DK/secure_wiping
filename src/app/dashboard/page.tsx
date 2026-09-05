@@ -201,66 +201,68 @@ export default function UserDashboardPage() {
                       </Link>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Device ID</TableHead>
-                          <TableHead>Manufacturer / Model</TableHead>
-                          <TableHead>Capacity</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Certificate</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {devices.map((dev) => (
-                          <TableRow key={dev.device_id}>
-                            <TableCell className="font-mono text-xs font-semibold">{dev.device_id}</TableCell>
-                            <TableCell>
-                              <div className="font-medium text-xs">{dev.model}</div>
-                              <div className="text-[11px] text-muted-foreground">{dev.manufacturer} • {dev.masked_serial}</div>
-                            </TableCell>
-                            <TableCell className="text-xs">{dev.capacity_human}</TableCell>
-                            <TableCell><Badge variant="outline" className="text-[10px]">{dev.device_type}</Badge></TableCell>
-                            <TableCell>{getDeviceStatusBadge(dev.status)}</TableCell>
-                            <TableCell>
-                              {dev.certificate_id ? (
-                                <Link href="/verify" className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                                  {dev.certificate_id.substring(0, 10)}...
-                                  <ExternalLink className="h-3 w-3" />
-                                </Link>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {dev.status === 'REGISTERED' && (
-                                <Link href={`/dashboard/listings/create?device_id=${dev.device_id}`}>
-                                  <Button size="sm" variant="outline" className="text-xs h-8 gap-1 text-primary border-primary/30">
-                                    <ShoppingBag className="h-3.5 w-3.5" /> List Device
-                                  </Button>
-                                </Link>
-                              )}
-                              {dev.status === 'VERIFIED' && (
-                                <Link href={`/dashboard/listings/create?device_id=${dev.device_id}`}>
-                                  <Button size="sm" variant="outline" className="text-xs h-8 gap-1 text-primary border-primary/30">
-                                    <ShoppingBag className="h-3.5 w-3.5" /> List for Sale
-                                  </Button>
-                                </Link>
-                              )}
-                              {dev.status === 'LISTED' && (
-                                <Link href="/marketplace">
-                                  <Button size="sm" variant="ghost" className="text-xs h-8">
-                                    View in Marketplace
-                                  </Button>
-                                </Link>
-                              )}
-                            </TableCell>
+                    <div className="w-full overflow-x-auto">
+                      <Table className="min-w-[680px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Device ID</TableHead>
+                            <TableHead>Manufacturer / Model</TableHead>
+                            <TableHead>Capacity</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Certificate</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {devices.map((dev) => (
+                            <TableRow key={dev.device_id}>
+                              <TableCell className="font-mono text-xs font-semibold">{dev.device_id}</TableCell>
+                              <TableCell>
+                                <div className="font-medium text-xs">{dev.model}</div>
+                                <div className="text-[11px] text-muted-foreground">{dev.manufacturer} • {dev.masked_serial}</div>
+                              </TableCell>
+                              <TableCell className="text-xs">{dev.capacity_human}</TableCell>
+                              <TableCell><Badge variant="outline" className="text-[10px]">{dev.device_type}</Badge></TableCell>
+                              <TableCell>{getDeviceStatusBadge(dev.status)}</TableCell>
+                              <TableCell>
+                                {dev.certificate_id ? (
+                                  <Link href="/verify" className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                                    {dev.certificate_id.substring(0, 10)}...
+                                    <ExternalLink className="h-3 w-3" />
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {dev.status === 'REGISTERED' && (
+                                  <Link href={`/dashboard/listings/create?device_id=${dev.device_id}`}>
+                                    <Button size="sm" variant="outline" className="text-xs h-8 gap-1 text-primary border-primary/30">
+                                      <ShoppingBag className="h-3.5 w-3.5" /> List Device
+                                    </Button>
+                                  </Link>
+                                )}
+                                {dev.status === 'VERIFIED' && (
+                                  <Link href={`/dashboard/listings/create?device_id=${dev.device_id}`}>
+                                    <Button size="sm" variant="outline" className="text-xs h-8 gap-1 text-primary border-primary/30">
+                                      <ShoppingBag className="h-3.5 w-3.5" /> List for Sale
+                                    </Button>
+                                  </Link>
+                                )}
+                                {dev.status === 'LISTED' && (
+                                  <Link href="/marketplace">
+                                    <Button size="sm" variant="ghost" className="text-xs h-8">
+                                      View in Marketplace
+                                    </Button>
+                                  </Link>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -289,46 +291,48 @@ export default function UserDashboardPage() {
                       <p>You have no active marketplace listings.</p>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Listing ID</TableHead>
-                          <TableHead>Title</TableHead>
-                          <TableHead>Price</TableHead>
-                          <TableHead>Condition</TableHead>
-                          <TableHead>Verified Badge</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {listings.map((l) => (
-                          <TableRow key={l.listing_id}>
-                            <TableCell className="font-mono text-xs">{l.listing_id}</TableCell>
-                            <TableCell className="font-medium text-xs max-w-xs truncate">{l.title}</TableCell>
-                            <TableCell className="text-xs font-bold">${Number(l.price_usd).toFixed(2)}</TableCell>
-                            <TableCell className="text-xs">{l.condition}</TableCell>
-                            <TableCell>
-                              {l.is_verified === 1 ? (
-                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]">
-                                  ✓ Verified
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-[10px]">Unverified</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell><Badge variant="outline" className="text-xs">{l.listing_status}</Badge></TableCell>
-                            <TableCell className="text-right">
-                              <Link href={`/marketplace/${l.listing_id}`}>
-                                <Button size="sm" variant="ghost" className="text-xs h-8 gap-1">
-                                  View <ChevronRight className="h-3 w-3" />
-                                </Button>
-                              </Link>
-                            </TableCell>
+                    <div className="w-full overflow-x-auto">
+                      <Table className="min-w-[680px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Listing ID</TableHead>
+                            <TableHead>Title</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Condition</TableHead>
+                            <TableHead>Verified Badge</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {listings.map((l) => (
+                            <TableRow key={l.listing_id}>
+                              <TableCell className="font-mono text-xs">{l.listing_id}</TableCell>
+                              <TableCell className="font-medium text-xs max-w-xs truncate">{l.title}</TableCell>
+                              <TableCell className="text-xs font-bold">${Number(l.price_usd).toFixed(2)}</TableCell>
+                              <TableCell className="text-xs">{l.condition}</TableCell>
+                              <TableCell>
+                                {l.is_verified === 1 ? (
+                                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]">
+                                    ✓ Verified
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px]">Unverified</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell><Badge variant="outline" className="text-xs">{l.listing_status}</Badge></TableCell>
+                              <TableCell className="text-right">
+                                <Link href={`/marketplace/${l.listing_id}`}>
+                                  <Button size="sm" variant="ghost" className="text-xs h-8 gap-1">
+                                    View <ChevronRight className="h-3 w-3" />
+                                  </Button>
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>

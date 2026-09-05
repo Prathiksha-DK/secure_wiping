@@ -2,13 +2,13 @@ import type { ReactNode } from 'react';
 import AppSidebar from '@/components/app-sidebar';
 import AppHeader from '@/components/app-header';
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default function WorkerLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full bg-muted/40 overflow-x-hidden">
+    <div className="flex min-h-screen w-full bg-background text-foreground overflow-x-hidden">
       <AppSidebar />
-      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14 w-full min-w-0 max-w-full">
+      <div className="flex flex-col flex-1 min-w-0 max-w-full md:pl-16 transition-all duration-300">
         <AppHeader />
-        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 min-w-0 max-w-full">
+        <main className="flex-1 w-full min-w-0 max-w-full p-4 sm:p-6 lg:p-8 overflow-x-hidden">
           {children}
         </main>
       </div>

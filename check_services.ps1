@@ -41,7 +41,7 @@ $frontend = Check-Port "Frontend" 3000
 $backend = Check-Port "Main Backend" 9758 "/api/devices"
 $socket = Check-Port "Socket" 8586
 $connApi = Check-Port "Connection API" 5403 "/getConnectedUsers"
-$restore = Check-Port "Restore" 9758 "/api/devices"
+$faris = Check-Port "FARIS API" 9758 "/api/devices"
 $reports = Check-Port "Reports" 9758 "/api/history"
 $boom = Check-Port "Boom Wipe" 5695 "/health"
 $pendrive = Check-Port "Pendrive" 8743 "/health"
@@ -50,7 +50,7 @@ Write-Host ("Frontend         :3000   " + $frontend) -ForegroundColor ($frontend
 Write-Host ("Main Backend     :9758   " + $backend) -ForegroundColor ($backend -eq "OK" ? "Green" : "Red")
 Write-Host ("Socket           :8586   " + $socket) -ForegroundColor ($socket -eq "OK" ? "Green" : "Red")
 Write-Host ("Connection API   :5403   " + $connApi) -ForegroundColor ($connApi -eq "OK" ? "Green" : "Red")
-Write-Host ("Restore          :9758   " + $restore) -ForegroundColor ($restore -eq "OK" ? "Green" : "Red")
+Write-Host ("FARIS Engine     :9758   " + $faris) -ForegroundColor ($faris -eq "OK" ? "Green" : "Red")
 Write-Host ("Reports          :9758   " + $reports) -ForegroundColor ($reports -eq "OK" ? "Green" : "Red")
 Write-Host ("Boom Wipe        :5695   " + $boom) -ForegroundColor ($boom -eq "OK" ? "Green" : "Yellow")
 Write-Host ("Pendrive         :8743   " + $pendrive) -ForegroundColor ($pendrive -eq "OK" ? "Green" : "Yellow")
