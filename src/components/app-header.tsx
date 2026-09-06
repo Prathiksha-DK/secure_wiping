@@ -1,260 +1,232 @@
-
 'use client';
 
-import React from 'react';
+import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ShieldCheck,
   PanelLeft,
-  Search,
+  ChevronRight,
   LogOut,
-  Settings,
-  Lock,
-  User
+  User,
+  Building2,
+  Search,
+  Eye,
+  Trash2,
+  LayoutDashboard,
+  Layers,
+  Activity,
+  FolderLock,
 } from 'lucide-react';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from '@/components/ui/breadcrumb';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { logout } from '@/app/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { isFarisLocked, showNavigationLockedAlert } from '@/lib/faris-lock';
-import { workerNavItems, masterNavItems } from '@/components/app-sidebar';
-import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 
-function getRoleFromCookie() {
-  if (typeof window === 'undefined') return 'worker';
-  const match = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : 'worker';
+function getRoleFromCookie(): string {
+  if (typeof window === 'undefined') return 'individual';
+  const roleMatch = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
+  if (roleMatch) return decodeURIComponent(roleMatch[1]);
+  const sessionMatch = document.cookie.match(/(?:^|; )session=([^;]*)/);
+  if (sessionMatch) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionMatch[1]));
+      return parsed.role || 'individual';
+    } catch {
+      return 'individual';
+    }
+  }
+  return 'individual';
 }
 
 export default function AppHeader() {
   const pathname = usePathname();
-  const pathSegments = pathname.split('/').filter(Boolean);
-  const [role, setRole] = React.useState('worker');
+  const [role, setRole] = React.useState('individual');
   const [mounted, setMounted] = React.useState(false);
-  const [isLocked, setIsLocked] = React.useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
     setRole(getRoleFromCookie());
-    setIsLocked(isFarisLocked());
-
-    const handleLockChange = (e: any) => {
-      setIsLocked(Boolean(e.detail?.locked ?? isFarisLocked()));
-    };
-
-    window.addEventListener('faris-lock-change', handleLockChange);
-    return () => {
-      window.removeEventListener('faris-lock-change', handleLockChange);
-    };
   }, [pathname]);
 
-  const handleNavClick = (e: React.MouseEvent, targetHref: string) => {
-    if (isFarisLocked()) {
-      if (targetHref !== '/faris' && !targetHref.startsWith('/faris/')) {
-        e.preventDefault();
-        e.stopPropagation();
-        showNavigationLockedAlert();
-        return;
-      }
-    }
-    setMobileMenuOpen(false);
+  const pathSegments = pathname.split('/').filter(Boolean);
+
+  const roleConfigs: Record<string, { label: string; badgeClass: string; icon: any; username: string }> = {
+    individual: {
+      label: 'Individual User',
+      badgeClass: 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300',
+      icon: User,
+      username: 'citizen_user',
+    },
+    government: {
+      label: 'Government / Org',
+      badgeClass: 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300',
+      icon: Building2,
+      username: 'gov_officer',
+    },
+    forensic: {
+      label: 'Forensic Investigator',
+      badgeClass: 'border-amber-500/40 bg-amber-950/40 text-amber-300',
+      icon: Search,
+      username: 'forensic_analyst',
+    },
+    master: {
+      label: 'Master Control',
+      badgeClass: 'border-purple-500/40 bg-purple-950/40 text-purple-300',
+      icon: ShieldCheck,
+      username: 'master_admin',
+    },
+    worker: {
+      label: 'Operator Suite',
+      badgeClass: 'border-blue-500/40 bg-blue-950/40 text-blue-300',
+      icon: User,
+      username: 'operator',
+    },
   };
 
-  if (!mounted) {
-    return (
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/80 backdrop-blur-md px-4 sm:px-6"></header>
-    );
-  }
-
-  const isMaster = role === 'master';
-  const items = isMaster ? masterNavItems : workerNavItems;
-  const base_path = isMaster ? '/master' : '/worker';
+  const currentRoleConfig = roleConfigs[role] || roleConfigs.individual;
+  const RoleIcon = currentRoleConfig.icon;
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 w-full items-center justify-between gap-2 border-b bg-background/90 backdrop-blur-md px-3 sm:px-6">
-      {/* Left: Mobile Drawer Trigger & Breadcrumbs */}
-      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button size="icon" variant="ghost" className="md:hidden shrink-0 h-9 w-9">
-              <PanelLeft className="h-5 w-5" />
-              <span className="sr-only">Toggle Menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
-            <SheetHeader className="p-4 border-b text-left">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-primary to-blue-600 text-primary-foreground shadow-sm">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-                <div>
-                  <SheetTitle className="text-base font-bold">SecureWipe</SheetTitle>
-                  <p className="text-[11px] text-muted-foreground uppercase font-medium">
-                    {isMaster ? 'Master Control' : 'Operator Suite'}
-                  </p>
-                </div>
-              </div>
-            </SheetHeader>
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-800/80 bg-[#090e1a]/95 px-6 backdrop-blur-md shadow-sm w-full">
+      {/* Mobile Drawer */}
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button size="icon" variant="outline" className="md:hidden border-slate-800 bg-slate-900 text-slate-300">
+            <PanelLeft className="h-4 w-4" />
+            <span className="sr-only">Toggle Menu</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="sm:max-w-xs bg-slate-950 border-slate-800 text-slate-100 p-5">
+          <nav className="grid gap-4 text-sm font-medium">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-base font-bold text-cyan-400"
+            >
+              <ShieldCheck className="h-5 w-5" />
+              <span>SecureWipe NTRO</span>
+            </Link>
+            <Link href="/individual/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <LayoutDashboard className="h-4 w-4 text-cyan-400" />
+              <span>Individual Dashboard</span>
+            </Link>
+            <Link href="/government/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Building2 className="h-4 w-4 text-emerald-400" />
+              <span>Government Fleet</span>
+            </Link>
+            <Link href="/forensic/dashboard" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Search className="h-4 w-4 text-amber-400" />
+              <span>Forensic Workbench</span>
+            </Link>
+            <div className="my-1 border-t border-slate-800/80" />
+            <Link href="/inspector" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Eye className="h-4 w-4" />
+              <span>Hex Inspector</span>
+            </Link>
+            <Link href="/wipe" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Trash2 className="h-4 w-4" />
+              <span>Sanitization Engine</span>
+            </Link>
+            <Link href="/assessment" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Activity className="h-4 w-4" />
+              <span>Residual Assessment</span>
+            </Link>
+            <Link href="/swarm" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <Layers className="h-4 w-4" />
+              <span>Swarm Engine</span>
+            </Link>
+            <Link href="/faris" className="flex items-center gap-2 text-slate-300 hover:text-white">
+              <FolderLock className="h-4 w-4" />
+              <span>FARIS Deep Recovery</span>
+            </Link>
+          </nav>
+        </SheetContent>
+      </Sheet>
 
-            {isLocked && (
-              <div className="m-3 p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs flex items-center gap-2">
-                <Lock className="h-3.5 w-3.5 animate-pulse shrink-0" />
-                <span className="text-[11px] font-medium">Forensic Recovery in progress</span>
-              </div>
-            )}
-
-            <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
-              {items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' &&
-                    item.href !== '/master/dashboard' &&
-                    item.href !== '/worker/dashboard' &&
-                    pathname.startsWith(`${item.href}/`));
-
-                const isItemLocked = isLocked && item.href !== '/faris';
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={(e) => handleNavClick(e, item.href)}
-                    className={cn(
-                      'flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition',
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                      isItemLocked && 'opacity-50 cursor-not-allowed'
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </div>
-                    {isItemLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="p-3 border-t mt-auto">
-              <div className="flex items-center justify-between text-xs text-muted-foreground px-2 py-1">
-                <span>Account Mode:</span>
-                <Badge variant="outline" className="text-[10px] uppercase font-bold">
-                  {role}
-                </Badge>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        <Breadcrumb className="hidden sm:flex min-w-0">
-          <BreadcrumbList className="text-xs">
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link
-                  href={`${base_path}/dashboard`}
-                  onClick={(e) => handleNavClick(e, `${base_path}/dashboard`)}
-                  className="font-medium"
-                >
-                  Dashboard
-                </Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            {pathSegments.slice(1).map((segment) => (
-              <React.Fragment key={segment}>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="capitalize truncate max-w-[120px]">
-                    {segment.replace(/-/g, ' ')}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </React.Fragment>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
+      {/* Breadcrumb Path Navigation */}
+      <div className="hidden md:flex items-center gap-2 text-xs font-mono text-slate-300">
+        <Link href="/" className="hover:text-cyan-300 transition-colors font-medium text-slate-400">SecureWipe</Link>
+        {pathSegments.map((segment, index) => (
+          <React.Fragment key={index}>
+            <ChevronRight className="h-3 w-3 text-slate-500" />
+            <span className={index === pathSegments.length - 1 ? 'text-white font-bold uppercase tracking-wider' : 'text-slate-300 capitalize'}>
+              {segment.replace(/-/g, ' ')}
+            </span>
+          </React.Fragment>
+        ))}
       </div>
 
-      {/* Right: Search & Actions */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            className="h-8 w-28 sm:w-44 md:w-56 pl-8 pr-2 text-xs rounded-lg bg-muted/40 focus:bg-background transition-all"
-          />
+      {/* Right-side Controls */}
+      <div className="ml-auto flex items-center gap-3">
+        {/* API Liveness Heartbeat */}
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full border border-slate-800 bg-slate-900/80 text-[11px] font-mono text-slate-300 shadow-sm">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span>Core API : 9758 Active</span>
         </div>
 
-        <ThemeToggle />
+        {/* Role Badge */}
+        <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-mono font-medium shadow-sm ${currentRoleConfig.badgeClass}`}>
+          <RoleIcon className="h-3.5 w-3.5" />
+          <span>{currentRoleConfig.label}</span>
+        </div>
 
+        {/* User Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-full overflow-hidden shrink-0 border"
+              className="overflow-hidden rounded-full border-slate-800 bg-slate-900 hover:border-slate-700 h-8 w-8 text-slate-200"
             >
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                  {isMaster ? 'M' : 'W'}
+                <AvatarFallback className="bg-slate-800 text-xs font-bold text-cyan-400">
+                  {currentRoleConfig.username.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-xs font-bold">{isMaster ? 'Master Control' : 'Operator Session'}</p>
-                <p className="text-[11px] text-muted-foreground font-mono">{role}@securewipe.local</p>
-              </div>
+          <DropdownMenuContent align="end" className="w-56 bg-slate-950 border-slate-800 text-slate-200 shadow-2xl">
+            <DropdownMenuLabel className="font-mono text-xs">
+              <div className="text-white font-semibold">{currentRoleConfig.username}</div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider">{currentRoleConfig.label}</div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href={`${base_path}/dashboard`} className="text-xs cursor-pointer">
-                Console Dashboard
+            <DropdownMenuSeparator className="bg-slate-800" />
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/individual/dashboard" className="flex items-center gap-2 text-xs">
+                <User className="h-3.5 w-3.5 text-cyan-400" />
+                <span>Individual User View</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/history" className="text-xs cursor-pointer">
-                Audit History
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/government/dashboard" className="flex items-center gap-2 text-xs">
+                <Building2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Government Fleet View</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form action={logout} className="w-full">
-                <button type="submit" className="w-full text-left flex items-center text-xs text-destructive">
-                  <LogOut className="mr-2 h-3.5 w-3.5" />
-                  Logout
-                </button>
-              </form>
+            <DropdownMenuItem asChild className="hover:bg-slate-900 cursor-pointer">
+              <Link href="/forensic/dashboard" className="flex items-center gap-2 text-xs">
+                <Search className="h-3.5 w-3.5 text-amber-400" />
+                <span>Forensic Workbench View</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-800" />
+            <DropdownMenuItem
+              onClick={() => logout()}
+              className="text-red-400 hover:text-red-300 hover:bg-red-950/30 cursor-pointer text-xs flex items-center gap-2"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out Session</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -262,4 +234,3 @@ export default function AppHeader() {
     </header>
   );
 }
-

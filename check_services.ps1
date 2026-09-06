@@ -41,19 +41,27 @@ $frontend = Check-Port "Frontend" 3000
 $backend = Check-Port "Main Backend" 9758 "/api/devices"
 $socket = Check-Port "Socket" 8586
 $connApi = Check-Port "Connection API" 5403 "/getConnectedUsers"
+$auth = Check-Port "Auth Platform" 9758 "/api/auth/me"
 $faris = Check-Port "FARIS API" 9758 "/api/devices"
 $reports = Check-Port "Reports" 9758 "/api/history"
 $boom = Check-Port "Boom Wipe" 5695 "/health"
 $pendrive = Check-Port "Pendrive" 8743 "/health"
 
-Write-Host ("Frontend         :3000   " + $frontend) -ForegroundColor ($frontend -eq "OK" ? "Green" : "Red")
-Write-Host ("Main Backend     :9758   " + $backend) -ForegroundColor ($backend -eq "OK" ? "Green" : "Red")
-Write-Host ("Socket           :8586   " + $socket) -ForegroundColor ($socket -eq "OK" ? "Green" : "Red")
-Write-Host ("Connection API   :5403   " + $connApi) -ForegroundColor ($connApi -eq "OK" ? "Green" : "Red")
-Write-Host ("FARIS Engine     :9758   " + $faris) -ForegroundColor ($faris -eq "OK" ? "Green" : "Red")
-Write-Host ("Reports          :9758   " + $reports) -ForegroundColor ($reports -eq "OK" ? "Green" : "Red")
-Write-Host ("Boom Wipe        :5695   " + $boom) -ForegroundColor ($boom -eq "OK" ? "Green" : "Yellow")
-Write-Host ("Pendrive         :8743   " + $pendrive) -ForegroundColor ($pendrive -eq "OK" ? "Green" : "Yellow")
+function Format-StatusColor($status, $isOptional = $false) {
+    if ($status -eq "OK") { return "Green" }
+    if ($isOptional) { return "Yellow" }
+    return "Red"
+}
+
+Write-Host ("Frontend         :3000   " + $frontend) -ForegroundColor (Format-StatusColor $frontend)
+Write-Host ("Main Backend     :9758   " + $backend) -ForegroundColor (Format-StatusColor $backend)
+Write-Host ("Auth Platform    :9758   " + $auth) -ForegroundColor (Format-StatusColor $auth)
+Write-Host ("FARIS Engine     :9758   " + $faris) -ForegroundColor (Format-StatusColor $faris)
+Write-Host ("Reports          :9758   " + $reports) -ForegroundColor (Format-StatusColor $reports)
+Write-Host ("Socket           :8586   " + $socket) -ForegroundColor (Format-StatusColor $socket)
+Write-Host ("Connection API   :5403   " + $connApi) -ForegroundColor (Format-StatusColor $connApi)
+Write-Host ("Boom Wipe        :5695   " + $boom) -ForegroundColor (Format-StatusColor $boom $true)
+Write-Host ("Pendrive         :8743   " + $pendrive) -ForegroundColor (Format-StatusColor $pendrive $true)
 Write-Host "Facial Security  :5000   SKIPPED" -ForegroundColor Gray
 Write-Host "DoD Wipe         :--     NOT EXECUTED" -ForegroundColor Gray
 

@@ -1,8 +1,7 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-import {NextResponse} from 'next/server';
-import type {NextRequest} from 'next/server';
-
-// Public & Main Application routes accessible directly
+// Public routes accessible without authentication
 const PUBLIC_ROUTES = [
   '/',
   '/login',
@@ -12,83 +11,102 @@ const PUBLIC_ROUTES = [
   '/verify',
   '/about',
   '/faq',
-  '/dashboard',
-  '/admin',
-  '/wipe',
-  '/inspector',
-  '/swarm',
-  '/faris',
-  '/history',
-  '/lifecycle',
-  '/iso-mode'
+  '/iso-mode',
 ];
 
 export function middleware(request: NextRequest) {
-  const session = request.cookies.get('session');
+  const sessionCookie = request.cookies.get('session') || request.cookies.get('session_token');
+  const userRoleCookie = request.cookies.get('userRole');
   const { pathname } = request.nextUrl;
   const host = request.headers.get('host') || '';
   const isPort3001 = host.includes(':3001') || request.nextUrl.port === '3001';
 
-  // If accessed on Port 3001 (Main Application Engine), route root to /login or role dashboard
+  // Allow direct access to system/API assets
+  if (
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon.ico')
+  ) {
+    return NextResponse.next();
+  }
+
+  // Parse session role
+  let role = 'individual';
+  let isAuthenticated = false;
+
+  if (sessionCookie) {
+    try {
+      const parsed = JSON.parse(sessionCookie.value);
+      role = parsed.role || 'individual';
+      isAuthenticated = true;
+    } catch {
+      if (userRoleCookie?.value) {
+        role = userRoleCookie.value;
+        isAuthenticated = true;
+      } else if (sessionCookie.value) {
+        isAuthenticated = true;
+      }
+    }
+  }
+
+  // Helper for role dashboard URL
+  const getRoleDashboard = (r: string) => {
+    switch (r) {
+      case 'government':
+        return '/government/dashboard';
+      case 'forensic':
+        return '/forensic/dashboard';
+      case 'master':
+        return '/master/dashboard';
+      case 'worker':
+        return '/worker/dashboard';
+      case 'individual':
+      default:
+        return '/individual/dashboard';
+    }
+  };
+
+  // If accessed on Port 3001 (Main Application Engine) or root landing while authenticated
   if (isPort3001 && pathname === '/') {
-    if (session) {
-      try {
-        const sessionData = JSON.parse(session.value);
-        if (sessionData.role === 'master') {
-          return NextResponse.redirect(new URL('/master/dashboard', request.url));
-        }
-        return NextResponse.redirect(new URL('/worker/dashboard', request.url));
-      } catch {}
+    if (isAuthenticated) {
+      return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
     }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Allow direct access to public routes
-  const isPublic = PUBLIC_ROUTES.some(route => pathname === route || (route !== '/' && pathname.startsWith(route)));
+  // If authenticated user is on /login, redirect to their role dashboard
+  if (pathname === '/login' && isAuthenticated) {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+  }
+
+  // Allow direct access to public marketing/informational routes
+  const isPublic = PUBLIC_ROUTES.some(
+    (route) => pathname === route || (route !== '/' && pathname.startsWith(route))
+  );
   if (isPublic) {
     return NextResponse.next();
   }
 
-  // Allow legacy internal dashboards
-  if (pathname.startsWith('/master/dashboard') || pathname.startsWith('/worker/dashboard')) {
-    return NextResponse.next();
-  }
-
-  // If there's no session and the user is not on a public page, redirect to login
-  if (!session) {
+  // If not authenticated and not on a public page, redirect to login
+  if (!isAuthenticated) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // If there's a session
-  if (session) {
-    try {
-      const sessionData = JSON.parse(session.value);
-      const {role} = sessionData;
-
-      // If user is on login page, redirect to their dashboard
-      if (pathname === '/login') {
-        if (role === 'master') {
-          return NextResponse.redirect(new URL('/master/dashboard', request.url));
-        }
-        if (role === 'worker') {
-          return NextResponse.redirect(new URL('/worker/dashboard', request.url));
-        }
-      }
-
-      // Role-based access control
-      if (pathname.startsWith('/master') && role !== 'master') {
-        return NextResponse.redirect(new URL('/worker/dashboard', request.url));
-      }
-      if (pathname.startsWith('/worker') && role !== 'worker') {
-        return NextResponse.redirect(new URL('/master/dashboard', request.url));
-      }
-
-    } catch (error) {
-        // If cookie is malformed, clear it and redirect to login
-        const response = NextResponse.redirect(new URL('/login', request.url));
-        response.cookies.delete('session');
-        return response;
-    }
+  // Role-Based Access Control (RBAC) Enforcement
+  if (pathname.startsWith('/government') && role !== 'government') {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+  }
+  if (pathname.startsWith('/forensic') && role !== 'forensic') {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+  }
+  if (pathname.startsWith('/individual') && role !== 'individual' && role !== 'master' && role !== 'worker') {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+  }
+  if (pathname.startsWith('/master') && role !== 'master') {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+  }
+  if (pathname.startsWith('/worker') && role !== 'worker') {
+    return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
   }
 
   return NextResponse.next();
@@ -96,13 +114,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };

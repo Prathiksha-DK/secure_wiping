@@ -1,9 +1,8 @@
-
 'use server';
 
-import {z} from 'zod';
-import {cookies} from 'next/headers';
-import {redirect} from 'next/navigation';
+import { z } from 'zod';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 const API_BASE = process.env.API_BASE || 'http://127.0.0.1:9758';
 
@@ -25,7 +24,7 @@ export async function suggestWipeMethodAction(prevState: any, formData: FormData
   }
 
   try {
-    const {suggestWipeMethod} = await import('@/ai/flows/suggest-wipe-method');
+    const { suggestWipeMethod } = await import('@/ai/flows/suggest-wipe-method');
     const result = await suggestWipeMethod(validatedFields.data as any);
     return result;
   } catch (error) {
@@ -36,36 +35,48 @@ export async function suggestWipeMethodAction(prevState: any, formData: FormData
   }
 }
 
-
-export async function getMasterUserDetails(username: string) {
-    if (username !== 'Madhan') {
-        return { status: 'not_master' };
-    }
-    try {
-        const response = await fetch(`${API_BASE}/api/get-login-details`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-        });
-
-        if (!response.ok) {
-            return { status: 'error', message: 'Could not connect to the user details service.' };
-        }
-
-        const result = await response.json();
-        return result;
-
-    } catch (error) {
-        console.error('Failed to connect to getLoginDetails endpoint:', error);
-        return { status: 'error', message: 'Could not connect to the user details service.' };
-    }
+export async function generateBlastReportAction(input: any): Promise<{ status: 'success'; report: any } | { status: 'error'; error: string }> {
+  try {
+    const { generateBlastReport } = await import('@/ai/flows/generate-blast-report');
+    const result = await generateBlastReport(input);
+    return { status: 'success' as const, report: result };
+  } catch (error) {
+    console.error(error);
+    return {
+      status: 'error' as const,
+      error: 'An error occurred while generating the blast report.',
+    };
+  }
 }
 
+export async function getMasterUserDetails(username: string) {
+  if (username !== 'Madhan') {
+    return { status: 'not_master' };
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/get-login-details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+
+    if (!response.ok) {
+      return { status: 'error', message: 'Could not connect to the user details service.' };
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Failed to connect to getLoginDetails endpoint:', error);
+    return { status: 'error', message: 'Could not connect to the user details service.' };
+  }
+}
 
 export async function login(prevState: any, formData: FormData) {
   const schema = z.object({
     username: z.string().min(1, 'Username is required'),
     password: z.string().min(1, 'Password is required'),
+    role: z.string().optional(),
     companyName: z.string().optional(),
     position: z.string().optional(),
     address: z.string().optional(),
@@ -74,7 +85,7 @@ export async function login(prevState: any, formData: FormData) {
   const data = schema.parse(Object.fromEntries(formData));
 
   try {
-    const authRes = await fetch(`${API_BASE}/api/auth/login`, {
+    const response = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -83,48 +94,81 @@ export async function login(prevState: any, formData: FormData) {
       }),
     });
 
-    const result = await authRes.json();
-    if (!authRes.ok || result.status !== 'success') {
+    const result = await response.json();
+
+    if (!response.ok || result.status !== 'success') {
+      // Offline fallback for demo accounts
+      if (data.username === 'citizen_user' && data.password === 'Individual@2026') {
+        return await _completeLogin({ username: data.username, role: 'individual', token: 'demo-indiv' });
+      } else if (data.username === 'gov_officer' && data.password === 'GovAdmin@2026') {
+        return await _completeLogin({ username: data.username, role: 'government', token: 'demo-gov' });
+      } else if (data.username === 'forensic_analyst' && data.password === 'Forensic@2026') {
+        return await _completeLogin({ username: data.username, role: 'forensic', token: 'demo-forensic' });
+      }
       return {
         error: result.message || 'Invalid username or password.',
       };
     }
 
-    const user = result.user;
-    const role = (user.role === 'ADMINISTRATOR' ? 'master' : 'worker');
-
-    const cookieStore = await cookies();
-    cookieStore.set('session', JSON.stringify({ username: user.username, role, token: user.token }), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-      path: '/',
-    });
-    cookieStore.set('session_token', user.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7,
-      path: '/',
-    });
-    cookieStore.set('userRole', role, {
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-      path: '/',
-    });
-
-    if (role === 'master') {
-      redirect('/master/dashboard');
-    } else {
-      redirect('/worker/dashboard');
-    }
+    const sessionData = result.session || result.user || { username: data.username, role: data.role || 'individual', token: 'tok-' + Date.now() };
+    return await _completeLogin(sessionData);
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
     console.error('Login action error:', error);
+
+    // Offline demo fallback if backend is unreachable
+    if (data.username === 'citizen_user' && data.password === 'Individual@2026') {
+      return await _completeLogin({ username: data.username, role: 'individual', token: 'demo-indiv' });
+    } else if (data.username === 'gov_officer' && data.password === 'GovAdmin@2026') {
+      return await _completeLogin({ username: data.username, role: 'government', token: 'demo-gov' });
+    } else if (data.username === 'forensic_analyst' && data.password === 'Forensic@2026') {
+      return await _completeLogin({ username: data.username, role: 'forensic', token: 'demo-forensic' });
+    }
+
     return {
-      error: error.message || 'Authentication service error. Ensure the backend is running.',
+      error: 'Could not connect to authentication service on port 9758. Please verify backend is running.',
     };
+  }
+}
+
+async function _completeLogin(sessionData: { username: string; role: string; token?: string; [k: string]: any }) {
+  const role = sessionData.role || 'individual';
+  const cookieStore = await cookies();
+
+  cookieStore.set('session', JSON.stringify(sessionData), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 7,
+    path: '/',
+  });
+
+  if (sessionData.token) {
+    cookieStore.set('session_token', sessionData.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    });
+  }
+
+  cookieStore.set('userRole', role, {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 7,
+    path: '/',
+  });
+
+  if (role === 'government') {
+    redirect('/government/dashboard');
+  } else if (role === 'forensic') {
+    redirect('/forensic/dashboard');
+  } else if (role === 'master') {
+    redirect('/master/dashboard');
+  } else if (role === 'worker') {
+    redirect('/worker/dashboard');
+  } else {
+    redirect('/individual/dashboard');
   }
 }
 

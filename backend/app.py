@@ -65,6 +65,11 @@ from swarm_evidence_ingest import create_certified_forensic_evidence_image
 app = Flask("securewipe_api")
 app.register_blueprint(swarm_bp)
 
+from ntro_platform_api import ntro_bp
+from auth import init_platform_db
+app.register_blueprint(ntro_bp)
+init_platform_db()
+
 # CORS Configuration
 if IS_PRODUCTION:
     CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
