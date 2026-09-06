@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DIST_DIR=.next-3000 next dev -p 3000",
-    "dev:marketplace": "NEXT_DIST_DIR=.next-3000 next dev -p 3000",
-    "dev:engine": "NEXT_DIST_DIR=.next-3001 next dev -p 3001",
+    "dev": "next dev -p 3000",
+    "dev:marketplace": "next dev -p 3000",
+    "dev:engine": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
