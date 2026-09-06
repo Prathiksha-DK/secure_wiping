@@ -17,6 +17,7 @@ import {
   FolderLock,
   Layers,
   FileCheck2,
+  Disc,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -52,6 +53,14 @@ const forensicNavItems = [
   { href: '/faris', icon: FolderLock, label: 'FARIS Deep Recovery' },
   { href: '/assessment', icon: Activity, label: 'Residual Evidence Check' },
   { href: '/history', icon: FileCheck2, label: 'Case Reports & Chain' },
+];
+
+const hunterNavItems = [
+  { href: '/hunter/dashboard', icon: Disc, label: 'Available ISO Images' },
+  { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
+  { href: '/faris', icon: FolderLock, label: 'FARIS Deep Recovery' },
+  { href: '/assessment', icon: Activity, label: 'Residual Evidence Check' },
+  { href: '/history', icon: FileCheck2, label: 'Case Reports & Records' },
 ];
 
 const legacyWorkerNavItems = [
@@ -124,6 +133,9 @@ export default function AppSidebar() {
   } else if (role === 'forensic') {
     items = forensicNavItems;
     homeHref = '/forensic/dashboard';
+  } else if (role === 'hunter') {
+    items = hunterNavItems;
+    homeHref = '/hunter/dashboard';
   } else if (role === 'worker' || role === 'master') {
     items = legacyWorkerNavItems;
     homeHref = '/individual/dashboard';
@@ -206,6 +218,13 @@ export default function AppSidebar() {
                 <Search className="h-3.5 w-3.5 text-amber-400" />
                 <span>Forensic Workbench</span>
               </Link>
+              <Link
+                href="/hunter/dashboard"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all"
+              >
+                <Disc className="h-3.5 w-3.5 text-purple-400" />
+                <span>Hunter Console</span>
+              </Link>
             </nav>
           </div>
         </div>
@@ -222,7 +241,13 @@ export default function AppSidebar() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-white truncate">
-                  {role === 'government' ? 'gov_officer' : role === 'forensic' ? 'forensic_analyst' : 'citizen_user'}
+                  {role === 'government'
+                    ? 'gov_officer'
+                    : role === 'forensic'
+                    ? 'forensic_analyst'
+                    : role === 'hunter'
+                    ? 'hunter_agent'
+                    : 'citizen_user'}
                 </div>
                 <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider truncate">
                   {role}

@@ -104,6 +104,12 @@ export async function login(prevState: any, formData: FormData) {
         return await _completeLogin({ username: data.username, role: 'government', token: 'demo-gov' });
       } else if (data.username === 'forensic_analyst' && data.password === 'Forensic@2026') {
         return await _completeLogin({ username: data.username, role: 'forensic', token: 'demo-forensic' });
+      } else if (data.username === 'hunter_agent' && data.password === 'Hunter@2026') {
+        return await _completeLogin({ username: data.username, role: 'hunter', token: 'demo-hunter' });
+      } else if (data.username === 'pending_hunter' && data.password === 'Hunter@2026') {
+        return { error: 'Your registration is awaiting approval from a Forensic Investigator.' };
+      } else if (data.username === 'rejected_hunter' && data.password === 'Hunter@2026') {
+        return { error: 'Registration rejected: Global certification expired in 2021 and could not be verified with accredited certification registry.' };
       }
       return {
         error: result.message || 'Invalid username or password.',
@@ -125,6 +131,12 @@ export async function login(prevState: any, formData: FormData) {
       return await _completeLogin({ username: data.username, role: 'government', token: 'demo-gov' });
     } else if (data.username === 'forensic_analyst' && data.password === 'Forensic@2026') {
       return await _completeLogin({ username: data.username, role: 'forensic', token: 'demo-forensic' });
+    } else if (data.username === 'hunter_agent' && data.password === 'Hunter@2026') {
+      return await _completeLogin({ username: data.username, role: 'hunter', token: 'demo-hunter' });
+    } else if (data.username === 'pending_hunter' && data.password === 'Hunter@2026') {
+      return { error: 'Your registration is awaiting approval from a Forensic Investigator.' };
+    } else if (data.username === 'rejected_hunter' && data.password === 'Hunter@2026') {
+      return { error: 'Registration rejected: Global certification expired in 2021 and could not be verified with accredited certification registry.' };
     }
 
     return {
@@ -163,6 +175,8 @@ async function _completeLogin(sessionData: { username: string; role: string; tok
     redirect('/government/dashboard');
   } else if (role === 'forensic') {
     redirect('/forensic/dashboard');
+  } else if (role === 'hunter') {
+    redirect('/hunter/dashboard');
   } else if (role === 'master') {
     redirect('/master/dashboard');
   } else if (role === 'worker') {

@@ -50,7 +50,7 @@ export default function LoginPage() {
   const [state, formAction] = useFormState(login, undefined);
   const [username, setUsername] = useState('citizen_user');
   const [password, setPassword] = useState('Individual@2026');
-  const [selectedRole, setSelectedRole] = useState<'individual' | 'government' | 'forensic'>('individual');
+  const [selectedRole, setSelectedRole] = useState<'individual' | 'government' | 'forensic' | 'hunter'>('individual');
   const [activeSession, setActiveSession] = useState<{ username: string; role: string } | null>(null);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function LoginPage() {
     }
   }, []);
 
-  const setDemoCredentials = (role: 'individual' | 'government' | 'forensic') => {
+  const setDemoCredentials = (role: 'individual' | 'government' | 'forensic' | 'hunter', variant: string = 'approved') => {
     setSelectedRole(role);
     if (role === 'individual') {
       setUsername('citizen_user');
@@ -76,9 +76,20 @@ export default function LoginPage() {
     } else if (role === 'government') {
       setUsername('gov_officer');
       setPassword('GovAdmin@2026');
-    } else {
+    } else if (role === 'forensic') {
       setUsername('forensic_analyst');
       setPassword('Forensic@2026');
+    } else if (role === 'hunter') {
+      if (variant === 'pending') {
+        setUsername('pending_hunter');
+        setPassword('Hunter@2026');
+      } else if (variant === 'rejected') {
+        setUsername('rejected_hunter');
+        setPassword('Hunter@2026');
+      } else {
+        setUsername('hunter_agent');
+        setPassword('Hunter@2026');
+      }
     }
   };
 
@@ -124,6 +135,8 @@ export default function LoginPage() {
                     ? '/government/dashboard'
                     : activeSession.role === 'forensic'
                     ? '/forensic/dashboard'
+                    : activeSession.role === 'hunter'
+                    ? '/hunter/dashboard'
                     : '/individual/dashboard'
                 }
               >
@@ -144,17 +157,32 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* Top Mode Selector: Sign In vs Register as Hunter */}
+        <div className="grid grid-cols-2 gap-2 bg-[#070C16] p-1.5 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="py-2.5 px-4 rounded-xl text-xs font-bold transition-all bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-950/50 flex items-center justify-center gap-2 cursor-default">
+            <LogIn className="h-4 w-4" />
+            <span>Sign In</span>
+          </div>
+          <Link
+            href="/hunter/register"
+            className="py-2.5 px-4 rounded-xl text-xs font-bold transition-all text-purple-300 hover:text-white hover:bg-purple-900/30 border border-purple-500/20 hover:border-purple-500/50 flex items-center justify-center gap-2 group"
+          >
+            <ShieldCheck className="h-4 w-4 text-purple-400 group-hover:scale-110 transition-transform" />
+            <span>Hunter Registration →</span>
+          </Link>
+        </div>
+
         {/* Role Quick Selection / Demo Pills */}
         <div className="bg-[#0D1527] border border-slate-800/90 rounded-2xl p-3 shadow-xl backdrop-blur-md space-y-2">
           <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider px-2 pt-1 flex items-center justify-between font-semibold">
             <span>Select Active Persona:</span>
             <span className="text-cyan-400 text-[10px] font-semibold">1-Click Quick Fill</span>
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               type="button"
               onClick={() => setDemoCredentials('individual')}
-              className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
                 selectedRole === 'individual'
                   ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200 shadow-md shadow-cyan-950/50 ring-1 ring-cyan-500/30'
                   : 'border-slate-800 bg-[#070C16] text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -164,13 +192,13 @@ export default function LoginPage() {
                 <User className="h-3.5 w-3.5 text-cyan-400" />
                 <span>Individual</span>
               </div>
-              <span className="text-[10px] text-slate-400 leading-tight">Personal & Marketplace</span>
+              <span className="text-[10px] text-slate-400 leading-tight">Personal User</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDemoCredentials('government')}
-              className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
                 selectedRole === 'government'
                   ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200 shadow-md shadow-emerald-950/50 ring-1 ring-emerald-500/30'
                   : 'border-slate-800 bg-[#070C16] text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -180,13 +208,13 @@ export default function LoginPage() {
                 <Building2 className="h-3.5 w-3.5 text-emerald-400" />
                 <span>Gov / Org</span>
               </div>
-              <span className="text-[10px] text-slate-400 leading-tight">LAN Fleet & Remote Wipe</span>
+              <span className="text-[10px] text-slate-400 leading-tight">LAN Fleet</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDemoCredentials('forensic')}
-              className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
                 selectedRole === 'forensic'
                   ? 'border-amber-500/60 bg-amber-500/15 text-amber-200 shadow-md shadow-amber-950/50 ring-1 ring-amber-500/30'
                   : 'border-slate-800 bg-[#070C16] text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -196,9 +224,58 @@ export default function LoginPage() {
                 <Search className="h-3.5 w-3.5 text-amber-400" />
                 <span>Forensic</span>
               </div>
-              <span className="text-[10px] text-slate-400 leading-tight">Deep Carver & FARIS</span>
+              <span className="text-[10px] text-slate-400 leading-tight">Deep Carver</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDemoCredentials('hunter')}
+              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                selectedRole === 'hunter'
+                  ? 'border-purple-500/60 bg-purple-500/15 text-purple-200 shadow-md shadow-purple-950/50 ring-1 ring-purple-500/30'
+                  : 'border-slate-800 bg-[#070C16] text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-semibold text-xs text-white">
+                <ShieldCheck className="h-3.5 w-3.5 text-purple-400" />
+                <span>Hunter</span>
+              </div>
+              <span className="text-[10px] text-slate-400 leading-tight">ISO Triage</span>
             </button>
           </div>
+
+          {/* Special test buttons when Hunter role is active */}
+          {selectedRole === 'hunter' && (
+            <div className="pt-2 border-t border-slate-800/80 mt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <span className="text-[10px] font-mono text-slate-400">Hunter Test States:</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('hunter', 'approved')}
+                  className="px-2 py-1 rounded-md text-[10px] font-mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-all"
+                  title="Test login for approved hunter"
+                >
+                  ✓ Approved
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('hunter', 'pending')}
+                  className="px-2 py-1 rounded-md text-[10px] font-mono bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-all"
+                  title="Test login rejection for pending approval"
+                >
+                  ⏳ Pending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDemoCredentials('hunter', 'rejected')}
+                  className="px-2 py-1 rounded-md text-[10px] font-mono bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 transition-all"
+                  title="Test login rejection for rejected applicant"
+                >
+                  ✗ Rejected
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Authentication Card */}
@@ -268,6 +345,18 @@ export default function LoginPage() {
 
               <div className="pt-2">
                 <SubmitButton />
+              </div>
+
+              <div className="pt-3 text-center border-t border-slate-800/70">
+                <p className="text-xs text-slate-400">
+                  New threat & forensic analyst?{' '}
+                  <Link
+                    href="/hunter/register"
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold underline underline-offset-4 decoration-cyan-500/50 hover:decoration-cyan-300 transition-colors"
+                  >
+                    Apply for Hunter Clearance →
+                  </Link>
+                </p>
               </div>
             </form>
           </div>

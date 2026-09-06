@@ -15,13 +15,23 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ALWAYS allow /login to render directly
-  if (pathname === '/login') {
+  // ALWAYS allow /login and public registration to render directly
+  if (
+    pathname === '/login' ||
+    pathname === '/hunter/register' ||
+    pathname.startsWith('/hunter/register') ||
+    pathname === '/register'
+  ) {
     return NextResponse.next();
   }
 
-  // If there's no session and the user is not on the login page, redirect to /login
-  if (!sessionCookie && pathname !== '/login') {
+  // If there's no session and the user is not on a public page, redirect to /login
+  if (
+    !sessionCookie &&
+    pathname !== '/login' &&
+    !pathname.startsWith('/hunter/register') &&
+    !pathname.startsWith('/register')
+  ) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -44,6 +54,8 @@ export function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL('/government/dashboard', request.url));
         } else if (role === 'forensic') {
           return NextResponse.redirect(new URL('/forensic/dashboard', request.url));
+        } else if (role === 'hunter') {
+          return NextResponse.redirect(new URL('/hunter/dashboard', request.url));
         } else if (role === 'master') {
           return NextResponse.redirect(new URL('/master/dashboard', request.url));
         } else if (role === 'worker') {
@@ -53,16 +65,25 @@ export function middleware(request: NextRequest) {
         }
       }
 
+      // Helper for fallback dashboard
+      const getRoleDashboard = (r: string) => {
+        if (r === 'hunter') return '/hunter/dashboard';
+        if (r === 'forensic') return '/forensic/dashboard';
+        if (r === 'government') return '/government/dashboard';
+        if (r === 'master') return '/master/dashboard';
+        if (r === 'worker') return '/worker/dashboard';
+        return '/individual/dashboard';
+      };
+
       // Enforce role boundaries
+      if (pathname.startsWith('/hunter') && !pathname.startsWith('/hunter/register') && role !== 'hunter') {
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+      }
       if (pathname.startsWith('/government') && role !== 'government') {
-        return NextResponse.redirect(
-          new URL(role === 'forensic' ? '/forensic/dashboard' : '/individual/dashboard', request.url)
-        );
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
       if (pathname.startsWith('/forensic') && role !== 'forensic') {
-        return NextResponse.redirect(
-          new URL(role === 'government' ? '/government/dashboard' : '/individual/dashboard', request.url)
-        );
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
       if (
         pathname.startsWith('/individual') &&
@@ -70,9 +91,7 @@ export function middleware(request: NextRequest) {
         role !== 'master' &&
         role !== 'worker'
       ) {
-        return NextResponse.redirect(
-          new URL(role === 'government' ? '/government/dashboard' : '/forensic/dashboard', request.url)
-        );
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
       if (pathname.startsWith('/master') && role !== 'master') {
         return NextResponse.redirect(new URL('/worker/dashboard', request.url));

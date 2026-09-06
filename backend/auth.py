@@ -33,6 +33,11 @@ ROLES = {
         "label": "Forensic Investigator",
         "description": "Evidence preservation, read-only inspection, deep file carving & reporting",
         "allowed_routes": ["/forensic", "/api/forensics", "/api/inspector", "/faris", "/api/audit"]
+    },
+    "hunter": {
+        "label": "Threat & Forensic Hunter",
+        "description": "Authorized external investigator for ISO evidence inspection & artifact triage",
+        "allowed_routes": ["/hunter", "/api/hunter", "/api/forensics", "/inspector", "/faris"]
     }
 }
 
@@ -170,8 +175,54 @@ def init_platform_db() -> None:
                 )
             """)
 
+            # 8. Hunter Registration Applications Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS hunter_applications (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT NOT NULL,
+                    full_name TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    mobile_number TEXT NOT NULL,
+                    aadhaar_number TEXT NOT NULL,
+                    pan_number TEXT NOT NULL,
+                    cert_name TEXT NOT NULL,
+                    cert_id TEXT NOT NULL,
+                    issuing_org TEXT NOT NULL,
+                    cert_expiry TEXT DEFAULT '',
+                    professional_details TEXT DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'PENDING_FORENSIC_APPROVAL', -- PENDING_FORENSIC_APPROVAL, APPROVED, REJECTED
+                    reviewed_by TEXT DEFAULT '',
+                    reviewed_at INTEGER DEFAULT 0,
+                    rejection_reason TEXT DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+
+            # 9. Available Forensic ISO Images Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS forensic_iso_images (
+                    id TEXT PRIMARY KEY,
+                    image_name TEXT NOT NULL,
+                    case_ref_id TEXT NOT NULL,
+                    uploaded_by TEXT NOT NULL,
+                    file_size_bytes INTEGER NOT NULL,
+                    file_size_human TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'AVAILABLE', -- AVAILABLE, IN_REVIEW, ARCHIVED
+                    sha256_hash TEXT NOT NULL,
+                    md5_hash TEXT DEFAULT '',
+                    storage_path TEXT DEFAULT '',
+                    is_hunter_accessible INTEGER DEFAULT 1,
+                    uploaded_at INTEGER NOT NULL
+                )
+            """)
+
         # Seed initial default role accounts if empty
         _seed_default_users(conn)
+        # Seed default ISO images and hunter test accounts
+        _seed_default_hunter_data(conn)
     finally:
         conn.close()
 
@@ -211,12 +262,89 @@ def _seed_default_users(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def _seed_default_hunter_data(conn: sqlite3.Connection) -> None:
+    """Seed sample ISO images and demo hunter accounts for testing approval states."""
+    cur = conn.cursor()
+    now = int(time.time())
+
+    # 1. Seed demo hunter accounts if not present
+    demo_hunters = [
+        # (username, password, status, full_name, email, mobile, aadhaar, pan, cert_name, cert_id, issuing_org, expiry, details, reviewed_by, rejection_reason)
+        (
+            "hunter_agent", "Hunter@2026", "APPROVED",
+            "Vikramaditya Sen", "vikram.hunter@cyberrecon.in", "+91-9876543210",
+            "5412-8823-9014", "ABCPV1234D",
+            "GIAC Certified Forensic Analyst (GCFA)", "GCFA-IND-884920",
+            "SANS Institute / GIAC", "2028-12-31",
+            "Senior Digital Forensics Incident Response (DFIR) Specialist with 7+ years in file system reconstruction.",
+            "forensic_analyst", ""
+        ),
+        (
+            "pending_hunter", "Hunter@2026", "PENDING_FORENSIC_APPROVAL",
+            "Ananya Deshmukh", "ananya.d@threatmatrix.org", "+91-9123456789",
+            "7634-1190-4456", "BQRPD9876K",
+            "Certified Computer Hacking Forensic Investigator (CHFI)", "CHFI-2026-9018",
+            "EC-Council", "2027-08-15",
+            "Malware analyst and memory forensics triage researcher.",
+            "", ""
+        ),
+        (
+            "rejected_hunter", "Hunter@2026", "REJECTED",
+            "Rohan Verma", "rohan.v@unverifiedsec.net", "+91-9456781230",
+            "3312-9987-1209", "CRTPV5541L",
+            "Junior Security Associate", "EXP-CERT-2021",
+            "Online Academy", "2021-05-10",
+            "External applicant seeking triage access.",
+            "forensic_analyst", "Global certification expired in 2021 and could not be verified with accredited certification registry."
+        )
+    ]
+
+    for uname, pwd, status, fname, email, phone, aadh, pan, cname, cid, corg, cexp, pdet, rev_by, rej_msg in demo_hunters:
+        cur.execute("SELECT id FROM users WHERE username = ?", (uname,))
+        user_row = cur.fetchone()
+        user_id = None
+        if not user_row:
+            h, s = _hash_password(pwd)
+            # Active status in users table if APPROVED, else match status
+            user_status = "active" if status == "APPROVED" else status
+            cur.execute("""
+                INSERT INTO users (username, password_hash, salt, role, email, organization, status, created_at)
+                VALUES (?, ?, ?, 'hunter', ?, 'Threat Hunter Network', ?, ?)
+            """, (uname, h, s, email, user_status, now))
+            user_id = cur.lastrowid
+        else:
+            user_id = user_row[0]
+
+        cur.execute("SELECT id FROM hunter_applications WHERE username = ?", (uname,))
+        if not cur.fetchone():
+            app_id = f"HUNT-APP-{uname.upper()}"
+            rev_time = now if rev_by else 0
+            cur.execute("""
+                INSERT INTO hunter_applications
+                (id, user_id, username, full_name, email, mobile_number, aadhaar_number, pan_number,
+                 cert_name, cert_id, issuing_org, cert_expiry, professional_details, status,
+                 reviewed_by, reviewed_at, rejection_reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (app_id, user_id, uname, fname, email, phone, aadh, pan, cname, cid, corg, cexp, pdet, status, rev_by, rev_time, rej_msg, now))
+
+    # 2. Seed real forensic ISO images if empty
+    cur.execute("SELECT COUNT(*) FROM forensic_iso_images")
+    if cur.fetchone()[0] == 0:
+        try:
+            import create_real_forensic_isos
+            create_real_forensic_isos.main()
+        except Exception as e:
+            print(f"[AUTH] Notice: real ISO generation deferred: {e}")
+
+    conn.commit()
+
+
 def authenticate_user(username: str, password: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-    """Authenticate username and password. Checks lockout and updates last login."""
+    """Authenticate username and password. Checks lockout, approval status, and updates last login."""
     conn = get_db()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE username = ?", (username.strip(),))
+        cur.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username.strip(),))
         user = cur.fetchone()
 
         if not user:
@@ -224,17 +352,33 @@ def authenticate_user(username: str, password: str) -> Tuple[bool, str, Optional
 
         user_dict = dict(user)
 
-        if user_dict["status"] != "active":
-            return False, "Account is suspended. Contact system administrator.", None
-
-        if user_dict["failed_attempts"] >= 5:
-            return False, "Account locked due to 5 consecutive failed logins.", None
-
+        # Check password first
         if not _verify_password(password, user_dict["salt"], user_dict["password_hash"]):
             # Increment failed attempts
             cur.execute("UPDATE users SET failed_attempts = failed_attempts + 1 WHERE id = ?", (user_dict["id"],))
             conn.commit()
             return False, "Invalid username or password", None
+
+        # Check account status according to role rules
+        user_status = user_dict.get("status", "active")
+
+        if user_status == "PENDING_FORENSIC_APPROVAL":
+            return False, "Your registration is awaiting approval from a Forensic Investigator.", None
+
+        if user_status == "REJECTED":
+            cur.execute("""
+                SELECT rejection_reason FROM hunter_applications
+                WHERE LOWER(username) = LOWER(?) ORDER BY created_at DESC LIMIT 1
+            """, (user_dict["username"],))
+            app_row = cur.fetchone()
+            rejection_reason = app_row[0] if (app_row and app_row[0]) else "Application did not meet forensic qualification requirements."
+            return False, f"Registration rejected: {rejection_reason}", None
+
+        if user_status not in ("active", "APPROVED"):
+            return False, "Account is suspended. Contact system administrator.", None
+
+        if user_dict["failed_attempts"] >= 5:
+            return False, "Account locked due to 5 consecutive failed logins.", None
 
         # Reset failed attempts and record login
         now = int(time.time())
@@ -273,7 +417,7 @@ def register_user(username: str, password: str, role: str, email: str = "", org:
     conn = get_db()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id FROM users WHERE username = ?", (username.strip(),))
+        cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username.strip(),))
         if cur.fetchone():
             return False, "Username already exists"
 

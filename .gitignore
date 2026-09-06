@@ -30,10 +30,13 @@ backend/data/*.db
 backend/data/*.db-journal
 backend/data/*.raw
 backend/data/*.bin
+backend/data/forensic_isos/*
+!backend/data/forensic_isos/.gitkeep
 *.db
 *.db-journal
 *.raw
 *.bin
+*.iso
 
 # Checkpoint backups
 backups_checkpoint_*/
