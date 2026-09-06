@@ -13,6 +13,7 @@ import sqlite3
 import hashlib
 import secrets
 import time
+import uuid
 from typing import Dict, Any, Optional, Tuple
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -219,10 +220,80 @@ def init_platform_db() -> None:
                 )
             """)
 
+            # 10. Device Disposition Lifecycle Decisions Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS device_disposition_records (
+                    id TEXT PRIMARY KEY,
+                    device_name TEXT NOT NULL,
+                    serial_number TEXT DEFAULT '',
+                    certificate_id TEXT DEFAULT '',
+                    target_type TEXT NOT NULL, -- disk, file, folder
+                    disposition TEXT NOT NULL, -- KEEP_SELF, MARKETPLACE_LIST, E_WASTE, GOV_AUCTION, GOV_BUYBACK
+                    health_score INTEGER NOT NULL,
+                    is_reusable INTEGER NOT NULL,
+                    actor_username TEXT NOT NULL,
+                    details_json TEXT DEFAULT '{}',
+                    created_at INTEGER NOT NULL
+                )
+            """)
+
+            # 11. Government Forward Auction Lots Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS government_auctions (
+                    id TEXT PRIMARY KEY,
+                    lot_number TEXT UNIQUE NOT NULL,
+                    title TEXT NOT NULL,
+                    device_name TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    capacity_gb REAL NOT NULL,
+                    certificate_id TEXT NOT NULL,
+                    agency_name TEXT NOT NULL,
+                    reserve_price_inr INTEGER NOT NULL,
+                    current_bid_inr INTEGER NOT NULL,
+                    highest_bidder TEXT DEFAULT '',
+                    total_bids INTEGER DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, CLOSED, AWARDED
+                    end_time INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+            """)
+
+            # 12. Government Auction Bids Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS government_auction_bids (
+                    id TEXT PRIMARY KEY,
+                    auction_id TEXT NOT NULL,
+                    bidder_name TEXT NOT NULL,
+                    bid_amount_inr INTEGER NOT NULL,
+                    bid_time INTEGER NOT NULL,
+                    FOREIGN KEY (auction_id) REFERENCES government_auctions(id)
+                )
+            """)
+
+            # 13. Government OEM Buy-Back Claims Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS government_buybacks (
+                    id TEXT PRIMARY KEY,
+                    voucher_code TEXT UNIQUE NOT NULL,
+                    device_name TEXT NOT NULL,
+                    serial_number TEXT DEFAULT '',
+                    media_type TEXT NOT NULL,
+                    capacity_gb REAL NOT NULL,
+                    certificate_id TEXT NOT NULL,
+                    agency_name TEXT NOT NULL,
+                    vendor_name TEXT NOT NULL,
+                    credit_value_inr INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'APPROVED', -- APPROVED, REDEEMED, AUDITED
+                    created_at INTEGER NOT NULL
+                )
+            """)
+
         # Seed initial default role accounts if empty
         _seed_default_users(conn)
         # Seed default ISO images and hunter test accounts
         _seed_default_hunter_data(conn)
+        # Seed default government auction lots and buyback claims
+        _seed_default_government_auction_data(conn)
     finally:
         conn.close()
 
@@ -335,6 +406,121 @@ def _seed_default_hunter_data(conn: sqlite3.Connection) -> None:
             create_real_forensic_isos.main()
         except Exception as e:
             print(f"[AUTH] Notice: real ISO generation deferred: {e}")
+
+    conn.commit()
+
+
+def _seed_default_government_auction_data(conn: sqlite3.Connection) -> None:
+    """Seed initial government forward auction lots and OEM buy-back claims if empty."""
+    cur = conn.cursor()
+    now = int(time.time())
+
+    # 1. Seed Government Auctions
+    cur.execute("SELECT COUNT(*) FROM government_auctions")
+    if cur.fetchone()[0] == 0:
+        demo_auctions = [
+            (
+                f"AUC-{uuid.uuid4().hex[:8].upper()}",
+                "GA-2026-081",
+                "Lot #GA-2026-081: 24x Enterprise SAS SSD Fleet (NIST 800-88 Purged)",
+                "Dell PowerEdge SAS SSD 1.92TB Array",
+                "SSD",
+                46080.0,
+                "CERT-GOV-2026-8810",
+                "National Technical Research Org (NTRO)",
+                145000,
+                162000,
+                "Apex Refurb & Data Systems Pvt Ltd",
+                6,
+                "ACTIVE",
+                now + (86400 * 3),
+                now - 3600
+            ),
+            (
+                f"AUC-{uuid.uuid4().hex[:8].upper()}",
+                "GA-2026-082",
+                "Lot #GA-2026-082: 15x Samsung 980 Pro 2TB NVMe M.2 Drives (Zero Residuals)",
+                "Samsung PM9A1 / 980 Pro 2TB M.2",
+                "NVME",
+                30720.0,
+                "CERT-GOV-2026-8814",
+                "Defence Research & Cyber Directorate",
+                95000,
+                108000,
+                "SiliconTech Refurbishment Labs",
+                4,
+                "ACTIVE",
+                now + (86400 * 5),
+                now - 7200
+            ),
+            (
+                f"AUC-{uuid.uuid4().hex[:8].upper()}",
+                "GA-2026-083",
+                "Lot #GA-2026-083: 40x Seagate Exos 16TB Enterprise 3.5\" HDDs (DoD 3-Pass)",
+                "Seagate Exos X16 16TB Enterprise SATA",
+                "HDD",
+                640000.0,
+                "CERT-GOV-2026-8819",
+                "NIC Central Server Farm",
+                280000,
+                315000,
+                "National Green IT Recyclers & Resellers",
+                9,
+                "ACTIVE",
+                now + (86400 * 7),
+                now - 14400
+            )
+        ]
+        for item in demo_auctions:
+            cur.execute("""
+                INSERT INTO government_auctions (
+                    id, lot_number, title, device_name, media_type, capacity_gb,
+                    certificate_id, agency_name, reserve_price_inr, current_bid_inr,
+                    highest_bidder, total_bids, status, end_time, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, item)
+
+    # 2. Seed Government Buybacks
+    cur.execute("SELECT COUNT(*) FROM government_buybacks")
+    if cur.fetchone()[0] == 0:
+        demo_buybacks = [
+            (
+                f"BB-{uuid.uuid4().hex[:8].upper()}",
+                "BB-VOUCH-2026-9041",
+                "HP Z4 G4 Workstation NVMe Micron 1TB",
+                "MIC****8920",
+                "NVME",
+                1000.0,
+                "CERT-GOV-2026-8801",
+                "National Technical Research Org (NTRO)",
+                "HP Enterprise Institutional Trade-In",
+                4800,
+                "APPROVED",
+                now - 86400
+            ),
+            (
+                f"BB-{uuid.uuid4().hex[:8].upper()}",
+                "BB-VOUCH-2026-9042",
+                "Dell Latitude 7420 SSD Kioxia 512GB",
+                "KX****4102",
+                "SSD",
+                512.0,
+                "CERT-GOV-2026-8805",
+                "Ministry of Electronics & IT",
+                "Dell Technologies OEM Asset Recovery",
+                2600,
+                "APPROVED",
+                now - 43200
+            )
+        ]
+        for bb in demo_buybacks:
+            cur.execute("""
+                INSERT INTO government_buybacks (
+                    id, voucher_code, device_name, serial_number, media_type,
+                    capacity_gb, certificate_id, agency_name, vendor_name,
+                    credit_value_inr, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, bb)
 
     conn.commit()
 

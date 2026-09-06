@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ShoppingBag,
   ShieldCheck,
@@ -23,14 +24,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-export default function PrivateMarketplacePage() {
+function PrivateMarketplaceContent() {
+  const searchParams = useSearchParams();
+  const prefillCert = searchParams.get("certId") || "";
+  const prefillDevice = searchParams.get("device") || "";
+
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openModal, setOpenModal] = useState(false);
+  const [openModal, setOpenModal] = useState(!!prefillCert);
 
   // Form states for new listing
-  const [certId, setCertId] = useState("");
-  const [deviceTitle, setDeviceTitle] = useState("");
+  const [certId, setCertId] = useState(prefillCert);
+  const [deviceTitle, setDeviceTitle] = useState(prefillDevice ? `${prefillDevice} (Certified Sanitized)` : "");
   const [mediaType, setMediaType] = useState("SSD");
   const [capacityGb, setCapacityGb] = useState("512");
   const [healthScore, setHealthScore] = useState("95");
@@ -273,5 +278,13 @@ export default function PrivateMarketplacePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PrivateMarketplacePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-400 font-mono text-xs">Loading Private Marketplace...</div>}>
+      <PrivateMarketplaceContent />
+    </Suspense>
   );
 }

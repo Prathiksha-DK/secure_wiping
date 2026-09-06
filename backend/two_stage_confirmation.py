@@ -46,7 +46,6 @@ def generate_stage1_confirmation(
     target_type = safety.get("target_type", "disk")
     fingerprint = safety.get("fingerprint", "")
     
-    # Construct exact required confirmation phrase
     clean_id = re_sub_phrase(serial if serial != "NO-SERIAL" else model)
     confirmation_phrase = f"CONFIRM-WIPE-{clean_id.upper()}"
     

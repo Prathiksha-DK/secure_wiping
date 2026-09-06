@@ -36,7 +36,12 @@ import {
   ExternalLink,
   Layers,
   Eye,
-  EyeOff
+  EyeOff,
+  Gavel,
+  ShoppingBag,
+  Receipt,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -369,6 +374,15 @@ function WipePageComponent() {
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
   const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
 
+  // User Persona & Post-Wipe Disposition State
+  const [userRole, setUserRole] = useState("individual");
+  const [dispositionStatus, setDispositionStatus] = useState<{
+    submitted: boolean;
+    choice: string;
+    message?: string;
+  } | null>(null);
+  const [submittingDisposition, setSubmittingDisposition] = useState(false);
+
   // File / Folder Browser Dialog State
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserMode, setBrowserMode] = useState<"file" | "folder">("file");
@@ -430,7 +444,69 @@ function WipePageComponent() {
 
     fetchDevices();
     fetchMethods();
+
+    if (typeof window !== "undefined") {
+      const roleMatch = document.cookie.match(/(?:^|; )userRole=([^;]*)/);
+      if (roleMatch) {
+        setUserRole(decodeURIComponent(roleMatch[1]));
+      } else {
+        const sessionMatch = document.cookie.match(/(?:^|; )session=([^;]*)/);
+        if (sessionMatch) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(sessionMatch[1]));
+            if (parsed.role) setUserRole(parsed.role);
+          } catch {}
+        }
+      }
+    }
   }, []);
+
+  const handleRecordDisposition = async (choice: string) => {
+    if (!sessionResult) return;
+    setSubmittingDisposition(true);
+    try {
+      const isReusable = sessionResult.final_state === "SANITIZED_AND_REUSABLE";
+      const devName = effectiveTarget || sessionResult.device_info?.model || "Sanitized Target";
+      const certId = sessionResult.session_id;
+
+      const res = await fetch(`${API_BASE}/api/lifecycle/disposition/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_name: devName,
+          serial_number: sessionResult.device_info?.serial || "SN-WIPED",
+          certificate_id: certId,
+          target_type: targetType,
+          disposition: choice,
+          health_score: isReusable ? 95 : 40,
+          is_reusable: isReusable,
+          actor_username: operator,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        setDispositionStatus({ submitted: true, choice, message: data.message });
+        toast({
+          title: "Disposition Confirmed",
+          description: data.message,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Disposition Error",
+          description: data.message || "Failed to record disposition choice.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Network Error",
+        description: err.message || "Failed to connect to lifecycle API.",
+      });
+    } finally {
+      setSubmittingDisposition(false);
+    }
+  };
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -1526,6 +1602,247 @@ function WipePageComponent() {
                     <p className="font-mono text-[11px] bg-muted p-2 rounded break-all">{sessionResult.tamper_hash}</p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Post-Wipe Device Disposition Matrix Card */}
+            <Card className="border-2 border-emerald-500/40 shadow-2xl bg-[#0B1322] text-slate-100 overflow-hidden">
+              <CardHeader className="pb-3 border-b border-slate-800/80 bg-[#070D18]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-emerald-400" />
+                    <CardTitle className="text-base font-bold text-white">
+                      {userRole === "government"
+                        ? "Government Asset Post-Wipe Disposition Matrix"
+                        : "Post-Sanitization Asset Disposition Decision"}
+                    </CardTitle>
+                  </div>
+                  <Badge className="font-mono text-[11px] px-2.5 py-0.5 border border-emerald-500/40 bg-emerald-500/15 text-emerald-300">
+                    Persona: {userRole.toUpperCase()}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs text-slate-400">
+                  {userRole === "government"
+                    ? "Mandated under GFR 2017 Rule 217 & GeM disposal norms: Choose between Forward Public Auction (competitive e-bidding) or OEM Buy-Back credit."
+                    : "Sanitization sequence complete. Decide whether to retain the reusable drive, list on the Private Marketplace (full-disk only), or dispatch to authorized E-Waste recycling."}
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="p-5 space-y-4">
+                {dispositionStatus?.submitted ? (
+                  <div className="p-4 rounded-xl border border-emerald-500/50 bg-emerald-500/10 text-emerald-200 text-xs font-medium space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-sm text-emerald-400">
+                      <CheckCircle className="h-4 w-4" />
+                      Disposition Confirmed: {dispositionStatus.choice}
+                    </div>
+                    <p className="text-slate-300">{dispositionStatus.message}</p>
+                  </div>
+                ) : userRole === "government" ? (
+                  /* ------------------------------------------------------------- */
+                  /* GOVERNMENT OPTIONS: 1. Forward Auction  2. Buy-Back           */
+                  /* ------------------------------------------------------------- */
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Option 1: Forward Auction */}
+                    <div className="p-5 rounded-2xl border border-emerald-500/40 bg-[#0E182A] hover:border-emerald-500 transition-all flex flex-col justify-between space-y-4 shadow-lg">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-white flex items-center gap-2">
+                            <Gavel className="h-4 w-4 text-emerald-400" />
+                            Option 1: Forward Public Auction
+                          </span>
+                          <Badge className="bg-emerald-600 text-white text-[10px] font-mono">GeM E-Auction</Badge>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          List this decommissioned, certified-wiped asset on the Government Forward Auction Portal. Open to accredited refurbishers and licensed buyers for competitive bidding under public procurement norms.
+                        </p>
+                        <div className="text-[11px] font-mono text-emerald-300/90 pt-1">
+                          ✓ Highest exchequer value realization<br />
+                          ✓ Certificate {sessionResult.session_id} auto-attached
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          handleRecordDisposition("GOV_AUCTION");
+                          router.push(
+                            `/government/auction?certId=${encodeURIComponent(sessionResult.session_id)}&device=${encodeURIComponent(effectiveTarget)}&capacity=${targetType === "disk" ? "1000" : "500"}&media=${sessionResult.device_info?.device_technology || "SSD"}&tab=auctions`
+                          );
+                        }}
+                        disabled={submittingDisposition}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold h-10 rounded-xl shadow-md shadow-emerald-950/40"
+                      >
+                        <Gavel className="h-4 w-4 mr-2" />
+                        Proceed to Forward Auction Page
+                      </Button>
+                    </div>
+
+                    {/* Option 2: OEM Buy-Back */}
+                    <div className="p-5 rounded-2xl border border-blue-500/40 bg-[#0E182A] hover:border-blue-500 transition-all flex flex-col justify-between space-y-4 shadow-lg">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-white flex items-center gap-2">
+                            <Receipt className="h-4 w-4 text-blue-400" />
+                            Option 2: OEM Buy-Back Scheme
+                          </span>
+                          <Badge className="bg-blue-600 text-white text-[10px] font-mono">Vendor Trade-In</Badge>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Claim institutional trade-in credit against your department&apos;s contracted replacement tender (Dell/HP/Lenovo). The cryptographic sanitization certificate serves as the legal release voucher.
+                        </p>
+                        <div className="text-[11px] font-mono text-blue-300/90 pt-1">
+                          ✓ Direct hardware tender deduction<br />
+                          ✓ Instant trade-in credit voucher
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          handleRecordDisposition("GOV_BUYBACK");
+                          router.push(
+                            `/government/auction?certId=${encodeURIComponent(sessionResult.session_id)}&device=${encodeURIComponent(effectiveTarget)}&capacity=${targetType === "disk" ? "1000" : "500"}&media=${sessionResult.device_info?.device_technology || "SSD"}&tab=buyback`
+                          );
+                        }}
+                        disabled={submittingDisposition}
+                        variant="outline"
+                        className="w-full border-blue-500/40 bg-blue-950/20 hover:bg-blue-900/40 text-blue-300 text-xs font-semibold h-10 rounded-xl"
+                      >
+                        <Receipt className="h-4 w-4 mr-2" />
+                        Claim OEM Buy-Back Credit
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ------------------------------------------------------------- */
+                  /* CITIZEN / INDIVIDUAL / WORKER OPTIONS                         */
+                  /* ------------------------------------------------------------- */
+                  <div className="space-y-4">
+                    {sessionResult.final_state === "SANITIZED_AND_REUSABLE" ? (
+                      /* REUSABLE DISPOSITION: Keep Self OR Private Marketplace (if full disk) */
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/30 p-3 rounded-xl border border-emerald-500/30">
+                          <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+                          <span>
+                            Hardware Health Assessment: <strong>Reusable (Zero Forensic Remnants)</strong>. Select disposition below:
+                          </span>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {/* Option 1: Keep for Yourself */}
+                          <div className="p-5 rounded-2xl border border-slate-800 bg-[#0E182A] hover:border-cyan-500/50 transition-all flex flex-col justify-between space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-sm text-white flex items-center gap-2">
+                                  <HardDrive className="h-4 w-4 text-cyan-400" />
+                                  Keep Device for Yourself
+                                </span>
+                                <Badge variant="secondary" className="text-[10px] bg-slate-800 text-slate-200">
+                                  Personal Retention
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-slate-300 leading-relaxed">
+                                Retain this storage device for your personal or internal use. You can safely repartition and reformat knowing all previous data has been irreversibly purged.
+                              </p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                • Self-retention status saved to compliance audit log
+                              </p>
+                            </div>
+                            <Button
+                              onClick={() => handleRecordDisposition("KEEP_SELF")}
+                              disabled={submittingDisposition}
+                              variant="outline"
+                              className="w-full text-xs font-semibold h-10 rounded-xl border-slate-700 hover:bg-slate-800 text-white"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2 text-emerald-400" />
+                              Keep for Myself (Personal Reuse)
+                            </Button>
+                          </div>
+
+                          {/* Option 2: Private Marketplace */}
+                          <div
+                            className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
+                              targetType === "disk"
+                                ? "border-emerald-500/40 bg-[#0E182A] hover:border-emerald-500"
+                                : "border-slate-800/80 bg-[#080E1A] opacity-80"
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-sm text-white flex items-center gap-2">
+                                  <ShoppingBag className="h-4 w-4 text-emerald-400" />
+                                  Private Marketplace
+                                </span>
+                                {targetType === "disk" ? (
+                                  <Badge className="bg-emerald-600 text-white text-[10px] font-mono">Eligible</Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="text-[10px] font-mono">Full Disk Required</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-300 leading-relaxed">
+                                {targetType === "disk"
+                                  ? "Entire physical device was wiped and cryptographically certified. You can list it in the verified Private Marketplace with pre-calculated valuation."
+                                  : "Marketplace listing requires entire device sanitization (Target: Entire Disk). Because this job only sanitized selected files/folders, marketplace resale is restricted."}
+                              </p>
+                              {targetType === "disk" ? (
+                                <p className="text-[11px] text-emerald-300 font-mono">
+                                  • Certified badge & buyer transfer agreement included
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-amber-400 font-mono">
+                                  ⚠ File/folder wipe only qualifies for self-retention
+                                </p>
+                              )}
+                            </div>
+
+                            {targetType === "disk" ? (
+                              <Button
+                                onClick={() => {
+                                  handleRecordDisposition("MARKETPLACE_LIST");
+                                  router.push(
+                                    `/individual/marketplace?certId=${encodeURIComponent(sessionResult.session_id)}&device=${encodeURIComponent(effectiveTarget)}`
+                                  );
+                                }}
+                                disabled={submittingDisposition}
+                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold h-10 rounded-xl shadow-md shadow-emerald-950/40"
+                              >
+                                <ShoppingBag className="h-4 w-4 mr-2" />
+                                List in Private Marketplace
+                              </Button>
+                            ) : (
+                              <Button
+                                disabled
+                                variant="outline"
+                                className="w-full text-xs font-semibold h-10 rounded-xl border-slate-800 opacity-60 cursor-not-allowed text-slate-500"
+                              >
+                                <Lock className="h-4 w-4 mr-2" />
+                                Marketplace Locked (Entire Disk Only)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* NON-REUSABLE DISPOSITION: Direct Route to E-Waste */
+                      <div className="p-6 rounded-2xl border border-rose-500/40 bg-rose-950/20 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-white flex items-center gap-2">
+                            <Trash2 className="h-5 w-5 text-rose-400" />
+                            Hardware Ineligible for Reuse: Mandatory E-Waste Recycling
+                          </span>
+                          <Badge variant="destructive" className="text-[10px] font-mono">Decommission to E-Waste</Badge>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          This storage media exhibited hardware degradation, uncorrectable sectors, or failed full verification passes. Under national IT asset lifecycle standards, non-reusable storage must be routed directly to an authorized CPCB e-waste recycler for physical destruction/ecological recovery.
+                        </p>
+                        <Button
+                          onClick={() => handleRecordDisposition("E_WASTE")}
+                          disabled={submittingDisposition}
+                          className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold h-10 px-6 rounded-xl shadow-lg shadow-rose-950/50"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Dispatch to Authorized CPCB E-Waste Recycler
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
