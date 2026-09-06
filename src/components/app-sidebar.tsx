@@ -21,6 +21,7 @@ import {
   LifeBuoy,
   Network,
   Wrench,
+  Gavel,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -44,6 +45,7 @@ const governmentNavItems = [
   { href: '/government/dashboard', icon: Building2, label: 'Fleet & LAN Command' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/wipe', icon: Trash2, label: 'Managed & Remote Wipe' },
+  { href: '/government/auction', icon: Gavel, label: 'Forward Auction & Buy-Back' },
   { href: '/swarm', icon: Layers, label: 'Swarm Cluster' },
   { href: '/government/audit', icon: Activity, label: 'Tamper-Evident Audit' },
   { href: '/lifecycle', icon: ShieldCheck, label: 'Lifecycle Readiness' },

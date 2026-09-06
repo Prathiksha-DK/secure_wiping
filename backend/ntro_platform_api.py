@@ -43,6 +43,13 @@ from health_valuation import (
     evaluate_device_health,
     create_marketplace_listing,
     get_marketplace_listings,
+    record_device_disposition,
+    get_disposition_records,
+    list_government_auction,
+    get_government_auctions,
+    place_government_bid,
+    create_government_buyback_claim,
+    get_government_buybacks,
 )
 
 # Create Blueprint
@@ -549,6 +556,181 @@ def api_lifecycle_marketplace_items():
     try:
         items = get_marketplace_listings()
         return jsonify(items), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ntro_bp.post("/api/lifecycle/disposition/decide")
+def api_lifecycle_disposition_decide():
+    """
+    Record post-wipe device disposition choice.
+    Enforces that private marketplace is strictly permitted ONLY if the entire device was wiped (target_type == 'disk').
+    """
+    try:
+        user = _get_current_user()
+        body = request.get_json(silent=True) or {}
+        device_name = body.get("device_name", "Unknown Storage Device")
+        serial = body.get("serial_number", "")
+        cert_id = body.get("certificate_id", "")
+        target_type = body.get("target_type", "disk")
+        disposition = body.get("disposition", "KEEP_SELF") # KEEP_SELF, MARKETPLACE_LIST, E_WASTE, GOV_AUCTION, GOV_BUYBACK
+        health_score = int(body.get("health_score", 100))
+        is_reusable = bool(body.get("is_reusable", True))
+        actor = user["username"] if user else body.get("actor_username", "citizen_user")
+
+        ok, msg, res = record_device_disposition(
+            device_name=device_name,
+            serial_number=serial,
+            certificate_id=cert_id,
+            target_type=target_type,
+            disposition=disposition,
+            health_score=health_score,
+            is_reusable=is_reusable,
+            actor_username=actor,
+            details=body.get("details", {})
+        )
+
+        if not ok:
+            return jsonify({"status": "error", "message": msg}), 400
+
+        record_audit_event(
+            user_id=str(user["user_id"]) if user else actor,
+            role=user["role"] if user else "individual",
+            device_id=serial or device_name,
+            operation=f"DISPOSITION_{disposition.upper()}",
+            status="SUCCESS",
+            details=res
+        )
+
+        return jsonify({"status": "success", "message": msg, "data": res}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@ntro_bp.get("/api/lifecycle/disposition/history")
+def api_lifecycle_disposition_history():
+    """Retrieve disposition records."""
+    try:
+        user = _get_current_user()
+        username = user["username"] if user and user.get("role") != "government" else None
+        records = get_disposition_records(username)
+        return jsonify(records), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Government Forward Auction & Buy-Back API
+# ---------------------------------------------------------------------------
+
+@ntro_bp.post("/api/lifecycle/government/auction/list")
+def api_lifecycle_gov_auction_list():
+    """Create a new Government Forward Auction lot."""
+    try:
+        user = _get_current_user()
+        body = request.get_json(silent=True) or {}
+        lot_number = body.get("lot_number", "")
+        title = body.get("title", "Government Sanitized IT Asset Lot")
+        device_name = body.get("device_name", "Enterprise Storage Media")
+        media_type = body.get("media_type", "SSD")
+        capacity_gb = float(body.get("capacity_gb", 1000.0))
+        cert_id = body.get("certificate_id", "")
+        agency = user.get("organization") if user else body.get("agency_name", "Government Agency")
+        reserve_price = int(body.get("reserve_price_inr", 25000))
+        duration = int(body.get("duration_days", 7))
+
+        ok, msg, lot = list_government_auction(
+            lot_number=lot_number,
+            title=title,
+            device_name=device_name,
+            media_type=media_type,
+            capacity_gb=capacity_gb,
+            certificate_id=cert_id,
+            agency_name=agency,
+            reserve_price_inr=reserve_price,
+            duration_days=duration
+        )
+
+        if not ok:
+            return jsonify({"status": "error", "message": msg}), 400
+
+        return jsonify({"status": "success", "lot": lot}), 201
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@ntro_bp.get("/api/lifecycle/government/auction/items")
+def api_lifecycle_gov_auction_items():
+    """List all active government forward auction lots."""
+    try:
+        auctions = get_government_auctions()
+        return jsonify(auctions), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ntro_bp.post("/api/lifecycle/government/auction/bid")
+def api_lifecycle_gov_auction_bid():
+    """Submit a competitive bid on a government auction lot."""
+    try:
+        user = _get_current_user()
+        body = request.get_json(silent=True) or {}
+        auction_id = body.get("auction_id", "")
+        bidder = user.get("username") if user else body.get("bidder_name", "Authorized Commercial Buyer")
+        bid_amount = int(body.get("bid_amount_inr", 0))
+
+        if not auction_id or bid_amount <= 0:
+            return jsonify({"status": "error", "message": "Auction ID and positive bid amount are required."}), 400
+
+        ok, msg, res = place_government_bid(auction_id, bidder, bid_amount)
+        if not ok:
+            return jsonify({"status": "error", "message": msg}), 400
+
+        return jsonify({"status": "success", "message": msg, "bid": res}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@ntro_bp.post("/api/lifecycle/government/buyback/claim")
+def api_lifecycle_gov_buyback_claim():
+    """Initiate an OEM/vendor buy-back claim for a wiped government device."""
+    try:
+        user = _get_current_user()
+        body = request.get_json(silent=True) or {}
+        device_name = body.get("device_name", "Government Managed Endpoint")
+        serial = body.get("serial_number", "")
+        media_type = body.get("media_type", "SSD")
+        capacity_gb = float(body.get("capacity_gb", 512.0))
+        cert_id = body.get("certificate_id", "")
+        agency = user.get("organization") if user else body.get("agency_name", "NTRO / Gov Directorate")
+        vendor = body.get("vendor_name", "OEM Certified Asset Trade-In")
+        credit_val = int(body.get("credit_value_inr", 3200))
+
+        ok, msg, claim = create_government_buyback_claim(
+            device_name=device_name,
+            serial_number=serial,
+            media_type=media_type,
+            capacity_gb=capacity_gb,
+            certificate_id=cert_id,
+            agency_name=agency,
+            vendor_name=vendor,
+            credit_value_inr=credit_val
+        )
+
+        if not ok:
+            return jsonify({"status": "error", "message": msg}), 400
+
+        return jsonify({"status": "success", "message": msg, "claim": claim}), 201
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@ntro_bp.get("/api/lifecycle/government/buyback/claims")
+def api_lifecycle_gov_buyback_claims():
+    """Retrieve logged government OEM buy-back claims."""
+    try:
+        claims = get_government_buybacks()
+        return jsonify(claims), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
