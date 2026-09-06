@@ -37,13 +37,15 @@ import {
   Phone,
   Mail,
   CreditCard,
-  Disc,
   Plus,
   X,
   Filter,
   Calendar,
   Loader2,
   Building,
+  LifeBuoy,
+  Briefcase,
+  Network,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,12 +54,15 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import CentralDeviceRegistryCard from "@/components/central-device-registry-card";
+import RegisteredDevicesModal from "@/components/registered-devices-modal";
 
 export default function ForensicDashboardPage() {
   const [targetPath, setTargetPath] = useState("");
   const [targetType, setTargetType] = useState<"file" | "folder" | "disk">("file");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any | null>(null);
+  const [registeredModalOpen, setRegisteredModalOpen] = useState(false);
   const [cases, setCases] = useState<any[]>([]);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [createdReport, setCreatedReport] = useState<any | null>(null);
@@ -75,16 +80,8 @@ export default function ForensicDashboardPage() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Forensic ISO Images State
-  const [isoImages, setIsoImages] = useState<any[]>([]);
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishLoading, setPublishLoading] = useState(false);
-  const [newIsoForm, setNewIsoForm] = useState({
-    image_name: "",
-    case_ref_id: "",
-    description: "",
-    file_size_human: "4.2 GB",
-  });
+  // Main Tab Navigation State
+  const [mainViewTab, setMainViewTab] = useState<"CARVER" | "HUNTER_REQUESTS">("CARVER");
 
   const fetchCases = async () => {
     try {
@@ -118,27 +115,12 @@ export default function ForensicDashboardPage() {
     }
   };
 
-  const fetchIsoImages = async () => {
-    try {
-      const res = await fetch("http://localhost:9758/api/forensics/iso-images");
-      if (res.ok) {
-        const data = await res.json();
-        setIsoImages(data.iso_images || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch ISO images:", err);
-    }
-  };
-
   useEffect(() => {
     fetchCases();
     fetchHunterRequests();
-    fetchIsoImages();
 
-    // Periodic poll for new hunter requests
     const interval = setInterval(() => {
       fetchHunterRequests();
-      fetchIsoImages();
     }, 8000);
 
     return () => clearInterval(interval);
@@ -230,28 +212,6 @@ export default function ForensicDashboardPage() {
     }
   };
 
-  const handlePublishIso = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newIsoForm.image_name || !newIsoForm.case_ref_id) return;
-    setPublishLoading(true);
-    try {
-      const res = await fetch("http://localhost:9758/api/forensics/iso-images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newIsoForm),
-      });
-      if (res.ok) {
-        setIsPublishModalOpen(false);
-        setNewIsoForm({ image_name: "", case_ref_id: "", description: "", file_size_human: "4.2 GB" });
-        await fetchIsoImages();
-      }
-    } catch (err) {
-      console.error("Failed to publish ISO:", err);
-    } finally {
-      setPublishLoading(false);
-    }
-  };
-
   const evidenceLevelStyles: Record<string, { badge: string; border: string; glow: string }> = {
     NO_EVIDENCE: {
       badge: "border-emerald-500/40 text-emerald-300 bg-emerald-500/15",
@@ -294,7 +254,7 @@ export default function ForensicDashboardPage() {
   });
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto text-slate-100 pb-12">
+    <div className="space-y-6 w-full max-w-7xl mx-auto text-foreground pb-12">
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
@@ -317,6 +277,15 @@ export default function ForensicDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link href="/forensic/seek-help">
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs flex items-center gap-2 h-9 px-3.5 shadow-lg shadow-amber-950/40 transition-all hover:scale-[1.02]"
+            >
+              <LifeBuoy className="h-3.5 w-3.5" />
+              <span>Seek Help (Acquire Case)</span>
+            </Button>
+          </Link>
           <Link href="/faris">
             <Button
               size="sm"
@@ -330,10 +299,21 @@ export default function ForensicDashboardPage() {
           <Link href="/inspector">
             <Button
               size="sm"
-              className="bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs flex items-center gap-2 h-9 px-4 shadow-lg shadow-amber-950/40 transition-all hover:scale-[1.02]"
+              variant="outline"
+              className="border-slate-700/80 bg-[#0E1628] hover:bg-[#152038] text-slate-200 text-xs flex items-center gap-2 h-9 px-3.5 shadow-sm"
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5 text-amber-400" />
               <span>Hex Sector Inspector</span>
+            </Button>
+          </Link>
+          <Link href="/forensic/evidence-graph">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-slate-700/80 bg-[#0E1628] hover:bg-[#152038] text-slate-200 text-xs flex items-center gap-2 h-9 px-3.5 shadow-sm"
+            >
+              <Network className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Evidence Graph</span>
             </Button>
           </Link>
         </div>
@@ -370,8 +350,77 @@ export default function ForensicDashboardPage() {
         </div>
       )}
 
+      {/* Seek Help Quick Access Banner */}
+      <div className="p-5 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-[#0D1527] to-cyan-950/30 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-950/50">
+            <LifeBuoy className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>Seek Help & Device Acquisition Workspace</span>
+              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] font-mono">
+                Separate Route: /forensic/seek-help
+              </Badge>
+            </h2>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Select a registered physical storage media from Central Device Registry, acquire bit-stream RAW image (.img), and publish investigation cases to Threat Hunters.
+            </p>
+          </div>
+        </div>
+        <Link href="/forensic/seek-help">
+          <Button
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-500 text-white text-xs h-9 px-4 rounded-xl font-semibold shadow-lg shadow-amber-950/50 shrink-0 flex items-center gap-1.5"
+          >
+            <span>Open Seek Help</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </div>
+
+      {/* High-Level Forensic Workspace Tabs */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#090F1D] border border-slate-800 rounded-2xl">
+        <button
+          onClick={() => setMainViewTab("CARVER")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            mainViewTab === "CARVER"
+              ? "bg-cyan-600 text-white shadow-lg shadow-cyan-950/50"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+          }`}
+        >
+          <Terminal className="h-4 w-4 text-cyan-300" />
+          <span>Streaming Carver & Evidence Registry</span>
+        </button>
+
+        <button
+          onClick={() => setMainViewTab("HUNTER_REQUESTS")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            mainViewTab === "HUNTER_REQUESTS"
+              ? "bg-purple-600 text-white shadow-lg shadow-purple-950/50"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+          }`}
+        >
+          <UserCheck className="h-4 w-4 text-purple-300" />
+          <span>Hunter Intake & Clearance</span>
+          {hunterCounts.pending > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/30 text-amber-200 border border-amber-500/50 font-bold">
+              {hunterCounts.pending}
+            </span>
+          )}
+        </button>
+
+        <Link
+          href="/forensic/seek-help"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-amber-400 hover:text-amber-300 hover:bg-slate-800/50 transition-all border border-amber-500/20"
+        >
+          <LifeBuoy className="h-4 w-4 text-amber-400" />
+          <span>Go to Seek Help Page →</span>
+        </Link>
+      </div>
+
       {/* Quick Metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-slate-700/80 transition-all">
           <div className="flex items-center justify-between pb-3">
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-medium">Hardware Safety</span>
@@ -398,19 +447,6 @@ export default function ForensicDashboardPage() {
 
         <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-slate-700/80 transition-all">
           <div className="flex items-center justify-between pb-3">
-            <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-medium">Shared ISO Images</span>
-            <div className="h-8 w-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-              <Disc className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-blue-300 font-mono tracking-tight">
-            {isoImages.length} Images
-          </div>
-          <p className="text-xs text-slate-400 mt-1.5">Published for authorized Hunter triage</p>
-        </div>
-
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-slate-700/80 transition-all">
-          <div className="flex items-center justify-between pb-3">
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-medium">Evidence Registry</span>
             <div className="h-8 w-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
               <FileCheck2 className="h-4 w-4" />
@@ -422,7 +458,7 @@ export default function ForensicDashboardPage() {
       </div>
 
       {/* DEDICATED SECTION: Hunter Registration Requests */}
-      <div id="hunter-registration-requests" className="bg-[#0D1527] border border-slate-800/90 rounded-2xl shadow-2xl overflow-hidden scroll-mt-6">
+      <div id="hunter-registration-requests" className={`bg-[#0D1527] border border-slate-800/90 rounded-2xl shadow-2xl overflow-hidden scroll-mt-6 ${mainViewTab === "HUNTER_REQUESTS" || mainViewTab === "CARVER" ? "block" : "hidden"}`}>
         <div className="px-6 py-5 border-b border-slate-800/80 bg-[#090F1D] flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -634,92 +670,6 @@ export default function ForensicDashboardPage() {
               </div>
             ))
           )}
-        </div>
-      </div>
-
-      {/* FORENSIC ISO IMAGES MANAGEMENT SECTION */}
-      <div className="bg-[#0D1527] border border-slate-800/90 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-800/80 bg-[#090F1D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <Disc className="h-5 w-5 text-blue-400" />
-              <h2 className="text-base font-bold text-white">Forensic ISO Images Repository</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/10 border border-blue-500/30 text-blue-300">
-                Hunter Triage Clearance
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Forensic bit-stream disk images and memory dumps authorized for examination by approved Threat & Forensic Hunters.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => setIsPublishModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white text-xs h-9 px-4 rounded-xl font-semibold shadow-md flex items-center gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Publish New Evidence ISO</span>
-          </Button>
-        </div>
-
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {isoImages.map((iso) => (
-            <div
-              key={iso.id}
-              className="bg-[#060A12] border border-slate-800 rounded-xl p-4 space-y-3 hover:border-slate-700 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-0.5">
-                  <span className="font-mono text-[10px] text-cyan-400 font-semibold">{iso.case_ref_id}</span>
-                  <h3 className="text-xs font-bold text-white leading-tight break-all">{iso.image_name}</h3>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 shrink-0">
-                  {iso.status}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{iso.description}</p>
-
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] font-mono text-slate-400">
-                <div className="flex justify-between">
-                  <span>File Size:</span>
-                  <span className="text-slate-200 font-semibold">{iso.file_size_human}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Uploaded By:</span>
-                  <span className="text-cyan-300">{iso.uploaded_by}</span>
-                </div>
-                <div className="space-y-0.5 pt-1">
-                  <div className="flex justify-between text-[10px] text-slate-500">
-                    <span>SHA-256 Checksum:</span>
-                    <button
-                      onClick={() => handleCopyDigest(iso.sha256_hash)}
-                      className="text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"
-                    >
-                      <Copy className="h-2.5 w-2.5" />
-                      <span>Copy</span>
-                    </button>
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-300 truncate bg-slate-900/90 p-1 rounded border border-slate-800">
-                    {iso.sha256_hash}
-                  </div>
-                </div>
-
-                <div className="pt-2 flex items-center justify-between border-t border-slate-800/60">
-                  <a
-                    href={`http://localhost:9758/api/forensics/iso-images/${iso.id}/download`}
-                    download={iso.image_name}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded border border-emerald-500/30 transition-all"
-                    title="Download authentic binary file"
-                  >
-                    <Download className="h-3 w-3" />
-                    <span>Download ISO Binary</span>
-                  </a>
-                  <span className="text-[10px] text-slate-500 font-mono">ECMA-119 Verified</span>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -1051,99 +1001,12 @@ export default function ForensicDashboardPage() {
         </div>
       )}
 
-      {/* PUBLISH ISO MODAL */}
-      {isPublishModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0D1527] border border-blue-500/40 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Disc className="h-5 w-5 text-blue-400" />
-                <h3 className="text-sm font-bold text-white">Publish Evidence ISO to Hunters</h3>
-              </div>
-              <button onClick={() => setIsPublishModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handlePublishIso} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="image_name" className="text-xs font-semibold text-slate-200">
-                  Image Filename (.iso / .raw / .dd) <span className="text-rose-400">*</span>
-                </Label>
-                <Input
-                  id="image_name"
-                  placeholder="e.g. NTRO-CR-2026-9021-CLONE.iso"
-                  value={newIsoForm.image_name}
-                  onChange={(e) => setNewIsoForm((p) => ({ ...p, image_name: e.target.value }))}
-                  required
-                  className="bg-[#060A12] border-slate-700 text-white text-xs h-10 rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="case_ref_id" className="text-xs font-semibold text-slate-200">
-                  Case / Reference ID <span className="text-rose-400">*</span>
-                </Label>
-                <Input
-                  id="case_ref_id"
-                  placeholder="e.g. NTRO-CR-2026-9021"
-                  value={newIsoForm.case_ref_id}
-                  onChange={(e) => setNewIsoForm((p) => ({ ...p, case_ref_id: e.target.value }))}
-                  required
-                  className="bg-[#060A12] border-slate-700 text-white text-xs h-10 rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="file_size_human" className="text-xs font-semibold text-slate-200">
-                  File Size (Human Readable)
-                </Label>
-                <Input
-                  id="file_size_human"
-                  placeholder="e.g. 4.2 GB"
-                  value={newIsoForm.file_size_human}
-                  onChange={(e) => setNewIsoForm((p) => ({ ...p, file_size_human: e.target.value }))}
-                  className="bg-[#060A12] border-slate-700 text-white text-xs h-10 rounded-xl font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="description" className="text-xs font-semibold text-slate-200">
-                  Investigation Scope / Description
-                </Label>
-                <Textarea
-                  id="description"
-                  placeholder="Describe acquisition source, filesystem layout, or specific triage instructions for Hunters..."
-                  value={newIsoForm.description}
-                  onChange={(e) => setNewIsoForm((p) => ({ ...p, description: e.target.value }))}
-                  rows={3}
-                  className="bg-[#060A12] border-slate-700 text-white text-xs rounded-xl resize-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsPublishModalOpen(false)}
-                  className="border-slate-700 text-slate-300 text-xs h-9 px-4 rounded-xl"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={publishLoading}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs h-9 px-4 rounded-xl shadow-lg shadow-blue-950/50"
-                >
-                  {publishLoading ? "Publishing ISO..." : "Publish ISO to Hunter Repository"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Central Device Registry Popup Modal */}
+      <RegisteredDevicesModal
+        open={registeredModalOpen}
+        onOpenChange={setRegisteredModalOpen}
+        currentPersona="forensic"
+      />
     </div>
   );
 }

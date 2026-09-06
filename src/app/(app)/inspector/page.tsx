@@ -55,6 +55,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import InlineDeviceRegistryBadge from "@/components/inline-device-registry-badge";
+import HunterCaseBanner, { type HunterActiveCase } from "@/components/hunter-case-banner";
 
 interface HexRow {
   address: string;
@@ -229,6 +231,8 @@ export default function StorageInspectorPage() {
 
   // Connected devices from OS
   const [devices, setDevices] = useState<any[]>([]);
+  // Non-null only for an authenticated Hunter with an active claimed case.
+  const [hunterActiveCase, setHunterActiveCase] = useState<HunterActiveCase | null>(null);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -256,19 +260,54 @@ export default function StorageInspectorPage() {
     }
   };
 
-  // Fetch real connected physical devices on mount
+  // Fetch real connected physical devices on mount. If deep-linked with
+  // ?device=<path>&lba=<n> (e.g. from the Evidence Relationship Graph),
+  // seed the viewer at that exact device/offset instead of the default first device.
   useEffect(() => {
-    fetch("http://localhost:9758/api/devices")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setDevices(data);
-          const firstRealDev = data[0].devicePath || data[0].name;
-          setTarget(firstRealDev);
-          loadDeviceAndSector(firstRealDev, 0, 512, 1);
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const deepLinkDevice = params?.get("device") || "";
+    const deepLinkLba = params?.get("lba") || "";
+
+    // Resolve Hunter/active-case status first. For a Hunter, the case's
+    // forensic image is the only authorized source -- it always wins over
+    // any deep-link device param, and the local device list is never shown.
+    fetch("http://localhost:9758/api/devices/current", { cache: "no-store", credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((registryData) => {
+        const activeCase: HunterActiveCase | null = registryData?.hunter_active_case || null;
+        setHunterActiveCase(activeCase);
+
+        if (activeCase && activeCase.image_path) {
+          const lbaNum = deepLinkLba ? Number(deepLinkLba) : 0;
+          setDevices([{ devicePath: activeCase.image_path, name: activeCase.image_filename || activeCase.case_id }]);
+          setTarget(activeCase.image_path);
+          setLba(lbaNum);
+          setLbaInput(String(lbaNum));
+          loadDeviceAndSector(activeCase.image_path, lbaNum, 512, 1);
+          return;
         }
+
+        fetch("http://localhost:9758/api/devices", { credentials: "include" })
+          .then((r) => r.json())
+          .then((data) => {
+            if (Array.isArray(data) && data.length > 0) {
+              setDevices(data);
+              if (deepLinkDevice) {
+                const lbaNum = deepLinkLba ? Number(deepLinkLba) : 0;
+                setLba(lbaNum);
+                setLbaInput(String(lbaNum));
+                loadDeviceAndSector(deepLinkDevice, lbaNum, 512, 1);
+              } else {
+                const firstRealDev = data[0].devicePath || data[0].name;
+                setTarget(firstRealDev);
+                loadDeviceAndSector(firstRealDev, 0, 512, 1);
+              }
+            }
+          })
+          .catch(() => {});
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch device metadata
@@ -278,6 +317,7 @@ export default function StorageInspectorPage() {
       const metaRes = await fetch("http://localhost:9758/api/inspector/device-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ target: targetPath }),
       });
       const metaData = await metaRes.json();
@@ -361,6 +401,7 @@ export default function StorageInspectorPage() {
         const hexRes = await fetch("http://localhost:9758/api/inspector/read-hex", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(payload),
         });
 
@@ -489,6 +530,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/folder-allocation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ folder_path: folderPath, target_device: target }),
       });
       const data = await res.json();
@@ -646,6 +688,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/file-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ path: filePath, compute_hash: false, target_device: target }),
       });
       const data = await res.json();
@@ -664,6 +707,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/file-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ path: filePath, compute_hash: true, target_device: target }),
       });
       const data = await res.json();
@@ -693,6 +737,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           target,
           query: searchQuery,
@@ -724,6 +769,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/compare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           before_hex: beforeHex,
           after_hex: afterHex,
@@ -744,6 +790,7 @@ export default function StorageInspectorPage() {
       const res = await fetch("http://localhost:9758/api/inspector/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           target,
           lba,
@@ -811,6 +858,8 @@ export default function StorageInspectorPage() {
         </div>
       </div>
 
+      <HunterCaseBanner activeCase={hunterActiveCase} />
+
       {/* Device Technology Boundary Warning */}
       <div className="p-3 bg-muted/30 rounded-lg border text-xs text-muted-foreground flex items-start gap-2.5">
         <ShieldAlert className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -831,6 +880,16 @@ export default function StorageInspectorPage() {
       {/* Target Selector Card */}
       <Card>
         <CardContent className="p-4 space-y-3">
+          {hunterActiveCase ? (
+            <div className="p-3 bg-muted/30 rounded-lg border text-xs font-mono">
+              <span className="text-muted-foreground">Inspecting (locked to active case): </span>
+              <span className="font-semibold text-foreground">{target}</span>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                As a Hunter operating on an active case, local devices and volumes cannot be selected --
+                this forensic image is the only authorized inspection source.
+              </p>
+            </div>
+          ) : (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
@@ -845,6 +904,13 @@ export default function StorageInspectorPage() {
                 />
                 <Button onClick={() => loadDeviceAndSector(target, 0, sectorSize, sectorCount)}>Inspect</Button>
               </div>
+              {target && (
+                <InlineDeviceRegistryBadge
+                  selectedDeviceIdentifier={target}
+                  className="mt-2"
+                  compact={true}
+                />
+              )}
             </div>
 
             {/* Quick Real Device Buttons */}
@@ -877,6 +943,7 @@ export default function StorageInspectorPage() {
               </div>
             )}
           </div>
+          )}
 
           {errorMsg && (
             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-xs space-y-2">

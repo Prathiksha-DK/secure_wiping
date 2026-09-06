@@ -151,7 +151,7 @@
 
 /* Enterprise Defense UI Tokens */
 .enterprise-card {
-  background-color: #0d1527;
+  background-color: hsl(var(--card));
   border: 1px solid rgba(51, 65, 85, 0.7);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
@@ -162,7 +162,7 @@
 }
 
 .enterprise-table-head {
-  background-color: #090e1a;
+  background-color: hsl(var(--background));
   color: #94a3b8;
   font-weight: 600;
   letter-spacing: 0.05em;

@@ -38,6 +38,18 @@ backend/data/forensic_isos/*
 *.bin
 *.iso
 
+# Seek Help forensic case data (large binary disk images + case artifacts,
+# generated at runtime -- never committed)
+backend/data/forensic_cases/
+
+# FARIS ephemeral test-run case artifacts (timestamped, regenerated each run)
+FARIS/tests/test_cases/test_damaged_db_*/
+FARIS/tests/test_cases/test_fld_*/
+FARIS/tests/test_cases/test_meta_*/
+FARIS/tests/test_cases/test_pipe_*/
+FARIS/tests/test_cases/test_sqlite_*/
+FARIS/tests/test_cases/test_svc_*/
+
 # Checkpoint backups
 backups_checkpoint_*/
 

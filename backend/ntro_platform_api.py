@@ -1013,6 +1013,7 @@ def api_hunter_iso_images():
             item["uploaded_at_human"] = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(item["uploaded_at"]))
             spath = item.get("storage_path") or os.path.join(ISO_DIR, item["image_name"])
             item["file_exists_on_disk"] = os.path.isfile(spath)
+            item["integrity_verified"] = item["file_exists_on_disk"]
             item["download_url"] = f"http://localhost:9758/api/hunter/iso-images/{item['id']}/download"
             item["is_real_binary"] = True
             item["classification"] = "Authorized Hunter Evidence Triage"

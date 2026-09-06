@@ -36,7 +36,10 @@ import {
   ExternalLink,
   Layers,
   Eye,
-  EyeOff
+  EyeOff,
+  PlusCircle,
+  CheckCircle2,
+  Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +80,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import InlineDeviceRegistryBadge from "@/components/inline-device-registry-badge";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -389,7 +393,88 @@ function WipePageComponent() {
   // Computed target
   const effectiveTarget = targetType === "disk" ? (selectedDevice || "") : targetPath;
 
-  // ---------------------------------------------------------------------------
+  // Central Device Registry State
+  const [connectedRegistryDevices, setConnectedRegistryDevices] = useState<any[]>([]);
+  const [registeringDevice, setRegisteringDevice] = useState(false);
+
+  const fetchRegistryStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/devices/current`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setConnectedRegistryDevices(data.connected_devices || []);
+      }
+    } catch (err) {
+      console.error("Failed to query central registry in wipe page:", err);
+    }
+  }, []);
+
+  const getDeviceRegistrationInfo = useCallback((devIdentifier?: string) => {
+    if (!devIdentifier) return { isRegistered: false, deviceId: null, record: null, matchedItem: null };
+    const target = devIdentifier.toLowerCase().trim();
+    const matchedItem = connectedRegistryDevices.find((item) => {
+      const devName = (item.raw_device?.name || "").toLowerCase().trim();
+      const devPath = (item.os_device_path || item.raw_device?.devicePath || "").toLowerCase().trim();
+      const devSerial = (item.raw_device?.serial || item.record?.serial_number || "").toLowerCase().trim();
+      const letters = (item.drive_letters || []).map((l: string) => l.toLowerCase().trim());
+      if (target && (devName.includes(target) || target.includes(devName))) return true;
+      if (target && devPath && (devPath.includes(target) || target.includes(devPath))) return true;
+      if (target && letters.some((l: string) => target.includes(l) || l.includes(target))) return true;
+      return false;
+    });
+    return {
+      isRegistered: matchedItem?.is_registered ?? false,
+      deviceId: matchedItem?.device_id || matchedItem?.record?.device_id || null,
+      record: matchedItem?.record || null,
+      matchedItem,
+    };
+  }, [connectedRegistryDevices]);
+
+  const handleRegisterDevice = async (rawDev: any) => {
+    setRegisteringDevice(true);
+    const regInfo = getDeviceRegistrationInfo(rawDev?.name || rawDev?.friendlyName);
+    const meta = regInfo.matchedItem?.detected_metadata;
+    const payload = {
+      manufacturer: meta?.manufacturer || rawDev?.manufacturer || "Generic",
+      model: meta?.model || rawDev?.name || rawDev?.friendlyName || "Unknown Storage Device",
+      serial_number: meta?.serial_number || rawDev?.serial || "UNKNOWN",
+      capacity: meta?.capacity || rawDev?.sizeBytes || 0,
+      capacity_readable: meta?.capacity_readable || rawDev?.size || "Unknown",
+      interface: meta?.interface || rawDev?.bus || "USB",
+      device_type: meta?.device_type || rawDev?.type || "USB Storage",
+      created_by: "operator",
+    };
+    try {
+      const res = await fetch(`${API_BASE}/api/devices/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        toast({
+          title: "Device Registered",
+          description: `Device registered into Central Registry: ${data.device_id}`,
+        });
+        await fetchRegistryStatus();
+      } else {
+        toast({
+          title: "Registration Error",
+          description: data.message || "Failed to register device.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Registration Failed",
+        description: e.message || "Failed to register device.",
+        variant: "destructive",
+      });
+    } finally {
+      setRegisteringDevice(false);
+    }
+  };
+
   // Initial fetch
   // ---------------------------------------------------------------------------
 
@@ -430,7 +515,8 @@ function WipePageComponent() {
 
     fetchDevices();
     fetchMethods();
-  }, []);
+    fetchRegistryStatus();
+  }, [fetchRegistryStatus]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -948,31 +1034,118 @@ function WipePageComponent() {
                 >
                   {devices.map((device) => {
                     const DevIcon = getDeviceIcon(device.type);
+                    const regInfo = getDeviceRegistrationInfo(device.name || device.friendlyName);
                     return (
                       <Label
                         key={device.id}
                         htmlFor={`dev-${device.id}`}
-                        className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-accent transition-colors [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5"
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-3 cursor-pointer hover:bg-accent transition-colors [&:has([data-state=checked])]:border-primary [&:has([data-state=checked])]:bg-primary/5 ${
+                          !regInfo.isRegistered ? "border-amber-500/30 bg-amber-950/5" : ""
+                        }`}
                       >
-                        <DevIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-sm truncate">{device.friendlyName || device.name}</p>
-                            {device.isSystem && (
-                              <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
-                                OS Boot Device
-                              </Badge>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <DevIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-sm truncate">{device.friendlyName || device.name}</p>
+                              {device.isSystem && (
+                                <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+                                  OS Boot Device
+                                </Badge>
+                              )}
+                              {regInfo.isRegistered ? (
+                                <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/40 text-[10px] font-mono font-bold flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                  {regInfo.deviceId}
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1">
+                                  <AlertTriangle className="h-3 w-3 text-amber-400" />
+                                  Registration Required
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                              {device.name} · {device.size} · {device.type || "Block Device"}
+                            </p>
+                            {!regInfo.isRegistered && (
+                              <p className="text-[11px] text-amber-400/90 font-medium mt-1 flex items-center gap-1">
+                                <span>Register the device to proceed with the operation</span>
+                              </p>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                            {device.name} · {device.size} · {device.type || "Block Device"}
-                          </p>
                         </div>
-                        <RadioGroupItem value={device.name} id={`dev-${device.id}`} />
+
+                        <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                          {!regInfo.isRegistered && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedDevice(device.name);
+                                handleRegisterDevice(device);
+                              }}
+                              disabled={registeringDevice}
+                              className="h-7 px-2.5 text-[11px] border-amber-500/50 text-amber-300 hover:bg-amber-500/10 font-medium shrink-0"
+                            >
+                              <PlusCircle className="h-3 w-3 mr-1" />
+                              Register Device
+                            </Button>
+                          )}
+                          <RadioGroupItem value={device.name} id={`dev-${device.id}`} />
+                        </div>
                       </Label>
                     );
                   })}
                 </RadioGroup>
+              )}
+
+              {/* Central Device Registry Inline Identity & Registration Callout */}
+              {selectedDevice && (
+                <div className="space-y-2 mt-2">
+                  {!getDeviceRegistrationInfo(selectedDevice).isRegistered && (
+                    <div className="p-4 rounded-xl border border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-[#0B1220] to-[#0D1527] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 shrink-0">
+                          <AlertTriangle className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white flex items-center gap-2">
+                            <span>Registration Required to Proceed</span>
+                            <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] font-mono">
+                              ACTION REQUIRED
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-amber-200/80 mt-0.5">
+                            Register the device to proceed with the operation. Only central registry verified hardware is eligible for sanitization pipeline execution.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const raw = devices.find(d => d.name === selectedDevice || d.friendlyName === selectedDevice);
+                          handleRegisterDevice(raw || { name: selectedDevice });
+                        }}
+                        disabled={registeringDevice}
+                        className="bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs h-9 px-4 rounded-xl shadow-lg shadow-amber-950/50 shrink-0 flex items-center gap-1.5"
+                      >
+                        <PlusCircle className="h-4 w-4" />
+                        <span>{registeringDevice ? "Registering..." : "Register Device Now"}</span>
+                      </Button>
+                    </div>
+                  )}
+
+                  <InlineDeviceRegistryBadge
+                    selectedDeviceIdentifier={selectedDevice}
+                    rawDevice={devices.find(d => d.name === selectedDevice || d.friendlyName === selectedDevice)}
+                    onRegistrationComplete={fetchRegistryStatus}
+                  />
+                </div>
               )}
 
               <div className="pt-2">
@@ -1558,8 +1731,9 @@ function WipePageComponent() {
     </div>
   );
 
-  const canProceedStep1 = targetType === "disk" ? !!selectedDevice : !!targetPath;
-  const canProceedStep2 = !!selectedMethod && !!operator;
+  const isSelectedDiskRegistered = targetType !== "disk" || !selectedDevice || getDeviceRegistrationInfo(selectedDevice).isRegistered;
+  const canProceedStep1 = (targetType === "disk" ? (!!selectedDevice && isSelectedDiskRegistered) : !!targetPath);
+  const canProceedStep2 = !!selectedMethod && !!operator && isSelectedDiskRegistered;
 
   return (
     <div className="space-y-6">
@@ -1587,8 +1761,16 @@ function WipePageComponent() {
         </Button>
 
         {step === 1 && (
-          <Button onClick={() => setStep(2)} disabled={!canProceedStep1}>
-            Configure Sanitization <ChevronRight className="ml-2 h-4 w-4" />
+          <Button
+            onClick={() => setStep(2)}
+            disabled={!canProceedStep1}
+            className={!isSelectedDiskRegistered && selectedDevice ? "bg-amber-600/60 hover:bg-amber-600/60 cursor-not-allowed text-white" : ""}
+          >
+            {!isSelectedDiskRegistered && selectedDevice ? (
+              <>Register Device to Proceed <ChevronRight className="ml-2 h-4 w-4" /></>
+            ) : (
+              <>Configure Sanitization <ChevronRight className="ml-2 h-4 w-4" /></>
+            )}
           </Button>
         )}
 

@@ -18,6 +18,9 @@ import {
   Layers,
   FileCheck2,
   Disc,
+  LifeBuoy,
+  Network,
+  Wrench,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -49,6 +52,9 @@ const governmentNavItems = [
 
 const forensicNavItems = [
   { href: '/forensic/dashboard', icon: Search, label: 'Forensic Workbench' },
+  { href: '/forensic/seek-help', icon: LifeBuoy, label: 'Seek Help (Acquire Case)' },
+  { href: '/forensic/evidence-graph', icon: Network, label: 'Evidence Relationship Graph' },
+  { href: '/forensic/toolkit', icon: Wrench, label: 'Forensic Toolkit' },
   { href: '/inspector', icon: Eye, label: 'Read-Only Hex Inspector' },
   { href: '/faris', icon: FolderLock, label: 'FARIS Deep Recovery' },
   { href: '/assessment', icon: Activity, label: 'Residual Evidence Check' },
@@ -56,9 +62,10 @@ const forensicNavItems = [
 ];
 
 const hunterNavItems = [
-  { href: '/hunter/dashboard', icon: Disc, label: 'Available ISO Images' },
+  { href: '/hunter/dashboard', icon: LifeBuoy, label: 'Forensic Case Investigations' },
   { href: '/inspector', icon: Eye, label: 'Storage Inspector (Hex)' },
   { href: '/faris', icon: FolderLock, label: 'FARIS Deep Recovery' },
+  { href: '/forensic/toolkit', icon: Wrench, label: 'Forensic Toolkit' },
   { href: '/assessment', icon: Activity, label: 'Residual Evidence Check' },
   { href: '/history', icon: FileCheck2, label: 'Case Reports & Records' },
 ];
@@ -142,7 +149,7 @@ export default function AppSidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800/80 bg-[#090e1a] md:flex shadow-2xl">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800/80 bg-background md:flex shadow-2xl">
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/80">
         <Link
@@ -230,14 +237,14 @@ export default function AppSidebar() {
         </div>
 
         {/* Bottom Operator Profile Card */}
-        <div className="p-3 border-t border-slate-800/80 bg-[#060A12]/80">
+        <div className="p-3 border-t border-slate-800/80 bg-background/80">
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/70 border border-slate-800">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="relative">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-cyan-400">
                   {role.slice(0, 2).toUpperCase()}
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#090e1a]" />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-white truncate">

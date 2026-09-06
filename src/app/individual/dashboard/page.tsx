@@ -25,6 +25,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import CentralDeviceRegistryCard from "@/components/central-device-registry-card";
+import RegisteredDevicesModal from "@/components/registered-devices-modal";
 
 interface Device {
   name: string;
@@ -44,6 +46,7 @@ export default function IndividualDashboardPage() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [healthValuation, setHealthValuation] = useState<any | null>(null);
   const [evaluating, setEvaluating] = useState(false);
+  const [registeredModalOpen, setRegisteredModalOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -98,7 +101,7 @@ export default function IndividualDashboardPage() {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto text-slate-100 pb-12">
+    <div className="space-y-6 w-full max-w-7xl mx-auto text-foreground pb-12">
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
@@ -140,15 +143,22 @@ export default function IndividualDashboardPage() {
 
       {/* Quick Metrics */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-slate-700/80 transition-all">
+        <div
+          onClick={() => setRegisteredModalOpen(true)}
+          className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-cyan-500/60 transition-all cursor-pointer group"
+          title="Click to view all registered devices and details in popup"
+        >
           <div className="flex items-center justify-between pb-3">
-            <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-medium">Detected Media</span>
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-medium group-hover:text-cyan-300 transition-colors">Registered Media</span>
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500/20 transition-colors">
               <HardDrive className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">{devices.length} Drives</div>
-          <p className="text-xs text-slate-400 mt-1.5">Ready for inspection or sanitization</p>
+          <div className="text-2xl font-extrabold text-white font-mono tracking-tight flex items-baseline justify-between">
+            <span>{devices.length} Drives</span>
+            <span className="text-[11px] font-mono font-normal text-cyan-400 group-hover:underline">View Details &rarr;</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">Click to view central registered devices popup</p>
         </div>
 
         <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-5 shadow-lg hover:border-slate-700/80 transition-all">
@@ -195,6 +205,9 @@ export default function IndividualDashboardPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Device Cards List */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Central Device Registry Section */}
+          <CentralDeviceRegistryCard currentPersona="individual" />
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -424,6 +437,12 @@ export default function IndividualDashboardPage() {
           </div>
         </div>
       </div>
+
+      <RegisteredDevicesModal
+        open={registeredModalOpen}
+        onOpenChange={setRegisteredModalOpen}
+        currentPersona="individual"
+      />
     </div>
   );
 }

@@ -457,6 +457,34 @@ def validate_session(token: str) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def create_session(username: str) -> Dict[str, Any]:
+    """Programmatically create a valid session token for a given user."""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, role, email, organization FROM users WHERE LOWER(username) = LOWER(?)", (username.strip(),))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"User '{username}' not found.")
+        now = int(time.time())
+        token = secrets.token_urlsafe(32)
+        expires_at = now + SESSION_TTL_SECONDS
+        cur.execute("""
+            INSERT INTO sessions (token, user_id, username, role, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (token, row["id"], row["username"], row["role"], now, expires_at))
+        conn.commit()
+        return {
+            "token": token,
+            "user_id": row["id"],
+            "username": row["username"],
+            "role": row["role"],
+            "expires_at": expires_at
+        }
+    finally:
+        conn.close()
+
+
 def terminate_session(token: str) -> bool:
     """Invalidate session token upon logout."""
     conn = get_db()

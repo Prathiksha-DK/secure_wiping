@@ -20,7 +20,7 @@ import socket
 import sqlite3
 import hashlib
 import uuid as _uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
@@ -67,8 +67,28 @@ app.register_blueprint(swarm_bp)
 
 from ntro_platform_api import ntro_bp
 from auth import init_platform_db
+from central_device_registry import device_registry_bp, init_device_registry_db
+from seek_help_case_engine import seek_help_bp, init_seek_help_db
+from evidence_graph import evidence_graph_bp
+from case_evidence import case_evidence_bp, init_case_evidence_db
+from forensic_toolkit import forensic_toolkit_bp
 app.register_blueprint(ntro_bp)
+app.register_blueprint(device_registry_bp)
+app.register_blueprint(seek_help_bp)
+app.register_blueprint(evidence_graph_bp)
+app.register_blueprint(case_evidence_bp)
+app.register_blueprint(forensic_toolkit_bp)
 init_platform_db()
+init_device_registry_db()
+init_seek_help_db()
+init_case_evidence_db()
+
+try:
+    from faris import faris_bp, init_faris_db
+    app.register_blueprint(faris_bp, url_prefix="/api/faris")
+    init_faris_db()
+except Exception as _faris_import_err:
+    print(f"[WARN] backend/faris module not registered: {_faris_import_err}")
 
 # CORS Configuration
 if IS_PRODUCTION:
@@ -318,6 +338,15 @@ def api_confirm_stage1():
     if not target:
         return jsonify({"status": "error", "message": "Missing 'target' parameter."}), 400
 
+    # Hunter Case Scoping
+    is_hunter, hunter_name, active_case = _get_request_hunter_context()
+    if is_hunter:
+        if not active_case:
+            return jsonify({"status": "error", "message": "Access Denied: No active forensic case claimed."}), 403
+        allowed, _, err = _check_hunter_inspector_target(target)
+        if not allowed:
+            return jsonify({"status": "error", "message": err}), 403
+
     result = generate_stage1_confirmation(
         target=target,
         method=method,
@@ -372,6 +401,15 @@ def post_sanitization_start():
         body = request.get_json(silent=True) or {}
         target = body.get("target", "").strip()
         method = body.get("method", "dod-3pass")
+
+        # Hunter Case Scoping
+        is_hunter, hunter_name, active_case = _get_request_hunter_context()
+        if is_hunter:
+            if not active_case:
+                return jsonify({"status": "error", "message": "Access Denied: No active forensic case claimed."}), 403
+            allowed, _, err = _check_hunter_inspector_target(target)
+            if not allowed:
+                return jsonify({"status": "error", "message": err}), 403
         max_iterations = int(body.get("maxIterations", 3))
         operator = getattr(request, "current_user", {}).get("sub", body.get("operator", "Operator"))
         client_ip = request.remote_addr or "127.0.0.1"
@@ -512,11 +550,28 @@ def get_sanitization_report(session_id):
     result = s.get("result")
     if not result:
         return jsonify({"error": "Session not yet complete"}), 202
-    return jsonify(result), 200
-
-# ---------------------------------------------------------------------------
 # API: Storage Inspector & Hex Viewer (Strictly Read-Only)
 # ---------------------------------------------------------------------------
+
+def _get_request_hunter_context() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """
+    Returns (is_hunter, username, resolved_case_source_or_None).
+    Delegates to the consolidated, hardened resolver in case_source.py
+    (no unsigned userRole-cookie identity fallback for this security-critical path).
+    """
+    from case_source import get_request_hunter_context
+    return get_request_hunter_context(request)
+
+
+def _check_hunter_inspector_target(target_str: str) -> Tuple[bool, str, Optional[str]]:
+    """
+    Validates that a target requested by a Hunter belongs exclusively to their active case.
+    Returns (allowed, resolved_target, error_message).
+    """
+    from case_source import authorize_forensic_target
+    return authorize_forensic_target(request, target_str)
+
+
 @app.post("/api/inspector/device-info")
 def post_inspector_device_info():
     """Return comprehensive metadata for selected storage object (Strictly Read-Only)."""
@@ -524,6 +579,12 @@ def post_inspector_device_info():
         from storage_inspector import inspect_storage_metadata
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
+
+        allowed, resolved_target, err = _check_hunter_inspector_target(target)
+        if not allowed:
+            return jsonify({"error": err}), 403
+        target = resolved_target
+
         if not target:
             return jsonify({"error": "Missing target parameter"}), 400
         info = inspect_storage_metadata(target)
@@ -540,6 +601,19 @@ def post_inspector_read_hex():
         from storage_inspector import read_storage_hex_sector
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
+        target_device = body.get("target_device")
+
+        # Hunter Case Scoping. If neither target nor target_device was
+        # supplied, this resolves (for a Hunter) to their active case's
+        # forensic image by default rather than leaving target empty.
+        allowed, resolved_target, err = _check_hunter_inspector_target(target or target_device)
+        if not allowed:
+            return jsonify({"error": err}), 403
+        if target_device:
+            target_device = resolved_target
+        else:
+            target = resolved_target
+
         lba = int(body.get("lba", 0))
         sector_size = int(body.get("sector_size", 512))
         sector_count = int(body.get("sector_count", 1))
@@ -548,7 +622,6 @@ def post_inspector_read_hex():
         child_file_path = body.get("child_file_path")
         extent_index = body.get("extent_index")
         relative_sector = body.get("relative_sector")
-        target_device = body.get("target_device")
 
         if extent_index is not None:
             extent_index = int(extent_index)
@@ -585,6 +658,13 @@ def post_inspector_folder_allocation():
         path = body.get("path") or body.get("folder_path", "")
         target_device = body.get("target_device") or body.get("target")
 
+        # Hunter Case Scoping
+        allowed, resolved_target, err = _check_hunter_inspector_target(target_device or path)
+        if not allowed:
+            return jsonify({"error": err}), 403
+        if target_device:
+            target_device = resolved_target
+
         if not path:
             return jsonify({"error": "Missing path parameter"}), 400
 
@@ -618,6 +698,13 @@ def post_inspector_search():
         from storage_inspector import unified_storage_search
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
+
+        # Hunter Case Scoping
+        allowed, resolved_target, err = _check_hunter_inspector_target(target)
+        if not allowed:
+            return jsonify({"error": err}), 403
+        target = resolved_target
+
         query = body.get("query", "")
         query_type = body.get("query_type", "text")
         search_mode = body.get("search_mode", "both")
@@ -649,12 +736,20 @@ def post_inspector_file_details():
         from storage_inspector import get_file_details
         body = request.get_json(silent=True) or {}
         path = body.get("path") or body.get("file_path", "")
+        target_device = body.get("target_device") or body.get("target")
+
+        # Hunter Case Scoping
+        allowed, resolved_target, err = _check_hunter_inspector_target(target_device or path)
+        if not allowed:
+            return jsonify({"error": err}), 403
+        if target_device:
+            target_device = resolved_target
+
         compute_hash = bool(body.get("compute_hash", False))
 
         if not path:
             return jsonify({"error": "Missing path parameter"}), 400
 
-        target_device = body.get("target_device") or body.get("target")
         result = get_file_details(file_path=path, compute_hash=compute_hash, target_device=target_device)
         return jsonify(result), 200
     except Exception as e:
@@ -664,11 +759,18 @@ def post_inspector_export():
     """Generate SHA-256 hashed forensic inspection certificate."""
     try:
         body = request.get_json(silent=True) or {}
+        target = body.get("target", "")
+
+        # Hunter Case Scoping
+        allowed, resolved_target, err = _check_hunter_inspector_target(target)
+        if not allowed:
+            return jsonify({"error": err}), 403
+
         report_data = {
             "session_id": f"INSPECT-{_uuid.uuid4().hex[:8].upper()}",
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "operator": body.get("operator", "Forensic Analyst"),
-            "target": body.get("target", ""),
+            "target": resolved_target or target,
             "metadata": body.get("metadata", {}),
             "inspected_lba": body.get("lba", 0),
             "sector_size": body.get("sector_size", 512),
@@ -719,6 +821,19 @@ def api_faris_engine_status():
 
 @app.get("/api/faris/devices")
 def api_faris_devices():
+    is_hunter, hunter_name, active_case = _get_request_hunter_context()
+    if is_hunter:
+        if not active_case:
+            return jsonify({"physical_devices": [], "image_files": []}), 200
+        case_dev = {
+            "device_id": active_case["device_id"],
+            "physical_path": active_case["image_path"],
+            "model": active_case["device_model"],
+            "size_bytes": active_case["device_capacity"] or active_case["image_size"],
+            "size_human": active_case["device_capacity_readable"],
+            "is_removable": True
+        }
+        return jsonify({"physical_devices": [case_dev], "image_files": [active_case["image_path"]]}), 200
     try:
         api = _get_faris_api()
         return jsonify(api.discover_devices()), 200
@@ -727,6 +842,11 @@ def api_faris_devices():
 
 @app.get("/api/faris/cases")
 def api_faris_list_cases():
+    is_hunter, hunter_name, active_case = _get_request_hunter_context()
+    if is_hunter:
+        if not active_case:
+            return jsonify({"cases": [], "total": 0}), 200
+        return jsonify({"cases": [active_case], "total": 1}), 200
     try:
         _get_faris_api()
         from core.paths import get_cases_dir
@@ -745,18 +865,21 @@ def api_faris_list_cases():
                             pass
                     cases_list.append({
                         "case_id": c_dir.name,
+                        "title": meta.get("title", f"FARIS Case {c_dir.name}"),
                         "path": str(c_dir),
-                        "created_at": meta.get("created_at", ""),
-                        "examiner": meta.get("examiner", "Examiner"),
-                        "description": meta.get("description", ""),
-                        "case_name": meta.get("case_name", c_dir.name),
+                        "evidence_path": meta.get("evidence_path", ""),
+                        "created_at": meta.get("created_at", int(c_dir.stat().st_ctime))
                     })
-        return jsonify({"status": "SUCCESS", "cases": cases_list}), 200
+        return jsonify({"cases": cases_list, "total": len(cases_list)}), 200
     except Exception as e:
-        return jsonify({"status": "ERROR", "message": str(e)}), 500
+        return jsonify({"cases": [], "total": 0, "error": str(e)}), 200
 
 @app.get("/api/faris/cases/<case_id>")
 def api_faris_case_detail(case_id):
+    is_hunter, hunter_name, active_case = _get_request_hunter_context()
+    if is_hunter:
+        if not active_case or active_case.get("case_id") != case_id:
+            return jsonify({"status": "ERROR", "message": f"Access Denied: As a Hunter, you are strictly scoped to Case {active_case.get('case_id') if active_case else 'None'}."}), 403
     try:
         _get_faris_api()
         from core.paths import resolve_case_dir
@@ -805,12 +928,23 @@ def api_faris_case_detail(case_id):
 @app.post("/api/faris/folder/resolve-scope")
 def api_faris_folder_resolve_scope():
     try:
-        api = _get_faris_api()
         body = request.get_json(silent=True) or {}
         folder_path = str(body.get("folder_path") or body.get("path") or "").strip()
         target_device = body.get("target_device") or body.get("target")
         if not folder_path:
             return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+
+        from case_source import authorize_forensic_target
+        dev_ok, resolved_device, dev_err = authorize_forensic_target(request, target_device or "")
+        if not dev_ok:
+            return jsonify({"status": "ERROR", "message": dev_err}), 403
+        folder_ok, resolved_folder, folder_err = authorize_forensic_target(request, folder_path)
+        if not folder_ok:
+            return jsonify({"status": "ERROR", "message": folder_err}), 403
+        target_device = resolved_device or target_device
+        folder_path = resolved_folder or folder_path
+
+        api = _get_faris_api()
         scope_result = api.resolve_folder_scope(folder_path, target_device=target_device)
         return jsonify(scope_result), 200
     except Exception as e:
@@ -819,7 +953,6 @@ def api_faris_folder_resolve_scope():
 @app.post("/api/faris/folder/recover")
 def api_faris_folder_recover():
     try:
-        api = _get_faris_api()
         body = request.get_json(silent=True) or {}
         case_id = str(body.get("case_id") or "").strip()
         if not case_id:
@@ -828,6 +961,20 @@ def api_faris_folder_recover():
         folder_path = str(body.get("folder_path") or body.get("target_path") or "").strip()
         if not folder_path:
             return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+
+        from case_source import authorize_forensic_target
+        target_device = body.get("target_device") or body.get("target")
+        dev_ok, resolved_device, dev_err = authorize_forensic_target(request, target_device or "")
+        if not dev_ok:
+            return jsonify({"status": "ERROR", "message": dev_err}), 403
+        folder_ok, resolved_folder, folder_err = authorize_forensic_target(request, folder_path)
+        if not folder_ok:
+            return jsonify({"status": "ERROR", "message": folder_err}), 403
+        folder_path = resolved_folder or folder_path
+        body["target_device"] = resolved_device or target_device
+        body["folder_path"] = folder_path
+
+        api = _get_faris_api()
         job_id = f"JOB-FLD-{_uuid.uuid4().hex[:8].upper()}"
         job_entry = {
             "job_id": job_id,
@@ -908,6 +1055,101 @@ def api_faris_folder_recover():
 
 @app.get("/api/faris/folder/jobs/<job_id>")
 def api_faris_folder_job_status(job_id: str):
+    with _faris_jobs_lock:
+        job = _faris_jobs.get(job_id)
+        if not job:
+            return jsonify({"status": "ERROR", "message": f"Job ID '{job_id}' not found"}), 404
+        return jsonify(job), 200
+
+
+@app.post("/api/faris/pipeline/start")
+def api_faris_pipeline_start_guarded():
+    """
+    Case-scoped, guarded device-mode recovery pipeline start. Unlike the
+    standalone FARIS microservice's /api/faris/pipeline/start (port 8760,
+    which has no role/case concept at all), this endpoint enforces that a
+    Hunter's source_path always resolves to their active case's forensic
+    image -- never an arbitrary local device -- before launching the same
+    underlying FARIS pipeline.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        source_path = str(body.get("source_path") or "").strip()
+
+        from case_source import authorize_forensic_target
+        allowed, resolved_source, err = authorize_forensic_target(request, source_path)
+        if not allowed:
+            return jsonify({"status": "ERROR", "message": err}), 403
+        body["source_path"] = resolved_source
+
+        case_id = str(body.get("case_id") or "").strip()
+        if not case_id:
+            case_id = f"FARIS-{_uuid.uuid4().hex[:8].upper()}"
+            body["case_id"] = case_id
+
+        job_id = f"JOB-{_uuid.uuid4().hex[:8].upper()}"
+        job_entry = {
+            "job_id": job_id,
+            "case_id": case_id,
+            "status": "RUNNING",
+            "progress_pct": 0.0,
+            "current_stage": "setup",
+            "stage_status": "RUNNING",
+            "logs": [],
+            "stages": {},
+            "result": None,
+            "error": None,
+            "start_time": time.time(),
+            "end_time": None,
+        }
+        with _faris_jobs_lock:
+            _faris_jobs[job_id] = job_entry
+
+        def _progress_cb(stage_id: str, status: str, pct: float, msg: str):
+            with _faris_jobs_lock:
+                if job_id in _faris_jobs:
+                    j = _faris_jobs[job_id]
+                    j["progress_pct"] = float(pct)
+                    j["current_stage"] = stage_id
+                    j["stage_status"] = status
+                    j["logs"].append({
+                        "timestamp": time.strftime("%H:%M:%S", time.localtime()),
+                        "stage": stage_id, "status": status, "pct": pct, "message": msg,
+                    })
+
+        def _worker():
+            try:
+                api = _get_faris_api()
+                result = api.run_full_forensic_pipeline(body, progress_callback=_progress_cb)
+                with _faris_jobs_lock:
+                    if job_id in _faris_jobs:
+                        j = _faris_jobs[job_id]
+                        j["status"] = result.get("status", "SUCCESS")
+                        j["result"] = result
+                        j["end_time"] = time.time()
+                        if result.get("status") == "FAILED":
+                            j["error"] = result.get("error", "Pipeline execution failed.")
+            except Exception as e:
+                with _faris_jobs_lock:
+                    if job_id in _faris_jobs:
+                        j = _faris_jobs[job_id]
+                        j["status"] = "FAILED"
+                        j["error"] = str(e)
+                        j["end_time"] = time.time()
+
+        thread = _faris_threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
+        return jsonify({
+            "status": "SUCCESS", "job_id": job_id, "case_id": case_id,
+            "message": "FARIS forensic pipeline started (case-scoped)",
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+@app.get("/api/faris/pipeline/status/<job_id>")
+def api_faris_pipeline_status_guarded(job_id: str):
     with _faris_jobs_lock:
         job = _faris_jobs.get(job_id)
         if not job:
@@ -1183,6 +1425,25 @@ def post_assessment_generate_test_image():
 # ---------------------------------------------------------------------------
 @app.get("/api/devices")
 def get_devices():
+    is_hunter, hunter_name, active_case = _get_request_hunter_context()
+    if is_hunter:
+        if not active_case:
+            return jsonify([]), 200
+        case_device = {
+            "name": active_case["device_model"],
+            "friendlyName": f"{active_case['device_model']} ({active_case['device_id']}) [Case: {active_case['case_id']}]",
+            "deviceId": active_case["device_id"],
+            "devicePath": active_case["image_path"],
+            "size": active_case["device_capacity_readable"],
+            "sizeBytes": active_case["device_capacity"] or active_case["image_size"],
+            "type": "Case Forensic Image",
+            "serial": active_case["device_serial"],
+            "bus": "Virtual / Case Image",
+            "isSystem": False,
+            "health": 100,
+            "healthStatus": "Healthy (Forensic Bit-Stream)"
+        }
+        return jsonify([case_device]), 200
     devices = list_devices()
     return jsonify(devices), 200
 

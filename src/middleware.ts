@@ -82,7 +82,17 @@ export function middleware(request: NextRequest) {
       if (pathname.startsWith('/government') && role !== 'government') {
         return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
-      if (pathname.startsWith('/forensic') && role !== 'forensic') {
+      // /forensic/toolkit is shared with the Hunter role (both use the
+      // Forensic Toolkit, scoped server-side to each user's own case).
+      const isSharedForensicToolkit = pathname.startsWith('/forensic/toolkit');
+      if (
+        pathname.startsWith('/forensic') &&
+        !isSharedForensicToolkit &&
+        role !== 'forensic'
+      ) {
+        return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
+      }
+      if (isSharedForensicToolkit && role !== 'forensic' && role !== 'hunter') {
         return NextResponse.redirect(new URL(getRoleDashboard(role), request.url));
       }
       if (

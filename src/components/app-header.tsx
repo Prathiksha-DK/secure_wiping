@@ -78,6 +78,12 @@ export default function AppHeader() {
       icon: Search,
       username: 'forensic_analyst',
     },
+    hunter: {
+      label: 'Threat & Forensic Hunter',
+      badgeClass: 'border-purple-500/40 bg-purple-950/40 text-purple-300',
+      icon: User,
+      username: 'threat_hunter',
+    },
     master: {
       label: 'Master Control',
       badgeClass: 'border-purple-500/40 bg-purple-950/40 text-purple-300',

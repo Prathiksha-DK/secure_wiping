@@ -56,6 +56,8 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 # ---------------------------------------------------------------------------
 
 @app.get("/api/faris/health")
+@app.get("/status")
+@app.get("/health")
 def get_health():
     """Health check endpoint."""
     return jsonify({

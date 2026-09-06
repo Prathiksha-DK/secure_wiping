@@ -78,7 +78,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": b"\xFF\xD9",
         "max_size": 30 * 1024 * 1024,  # 30 MB
-        "min_size": 2048,  # Filter out tiny thumbnail fragments / junk noise
+        "min_size": 32,
         "sector_aligned": True
     },
     {
@@ -89,7 +89,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": b"IEND\xaeB`\x82",
         "max_size": 30 * 1024 * 1024,
-        "min_size": 1024,  # Filter out tiny junk noise
+        "min_size": 32,
         "sector_aligned": True
     },
     {
@@ -271,19 +271,17 @@ class FileCarver:
                     if footer:
                         search_limit = min(buf_len, i + max_sz)
                         
-                        if sig_type == "pdf":
-                            # Use rfind to capture the latest %%EOF in the bounded window
-                            footer_idx = buffer.rfind(footer, i + len(matched_sig["header"]), search_limit)
-                        else:
-                            footer_idx = buffer.find(footer, i + len(matched_sig["header"]), search_limit)
+                        footer_idx = buffer.find(footer, i + len(matched_sig["header"]), search_limit)
 
                         if footer_idx != -1:
                             if sig_type == "zip":
                                 # ZIP End of Central Directory record is at least 22 bytes
                                 end_idx = min(buf_len, footer_idx + len(footer) + 20)
                             elif sig_type == "pdf":
-                                # Include trailing newlines / EOF characters
-                                end_idx = min(buf_len, footer_idx + len(footer) + 8)
+                                # Include trailing newlines / carriage returns only if present
+                                end_idx = footer_idx + len(footer)
+                                while end_idx < search_limit and buffer[end_idx:end_idx+1] in (b"\r", b"\n"):
+                                    end_idx += 1
                             elif sig_type == "rtf":
                                 end_idx = footer_idx + len(footer)
                             else:

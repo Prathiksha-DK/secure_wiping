@@ -28,12 +28,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import CentralDeviceRegistryCard from "@/components/central-device-registry-card";
+import RegisteredDevicesModal from "@/components/registered-devices-modal";
 
 export default function GovernmentDashboardPage() {
   const [lanDevices, setLanDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [authorizing, setAuthorizing] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [registeredModalOpen, setRegisteredModalOpen] = useState(false);
 
   const fetchLanDevices = async () => {
     setLoading(true);
@@ -81,7 +84,7 @@ export default function GovernmentDashboardPage() {
   const authorizedCount = lanDevices.filter((d) => d.is_authorized === 1).length;
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto text-slate-100 pb-12">
+    <div className="space-y-6 w-full max-w-7xl mx-auto text-foreground pb-12">
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
@@ -176,6 +179,9 @@ export default function GovernmentDashboardPage() {
           <p className="text-xs text-slate-400 mt-1.5">NIST 800-88 / DoD Certs Logged</p>
         </div>
       </div>
+
+      {/* Central Device Registry Section */}
+      <CentralDeviceRegistryCard currentPersona="government" />
 
       {/* LAN Fleet Table */}
       <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden">
@@ -286,6 +292,12 @@ export default function GovernmentDashboardPage() {
           </table>
         </div>
       </div>
+
+      <RegisteredDevicesModal
+        open={registeredModalOpen}
+        onOpenChange={setRegisteredModalOpen}
+        currentPersona="government"
+      />
     </div>
   );
 }

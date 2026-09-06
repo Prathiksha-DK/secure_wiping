@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { isFarisLocked, setFarisLock, showNavigationLockedAlert } from "@/lib/faris-lock";
 import { cn } from "@/lib/utils";
+import InlineDeviceRegistryBadge from "@/components/inline-device-registry-badge";
 
 const FARIS_SERVERS = [
   process.env.NEXT_PUBLIC_FARIS_API_URL || "http://localhost:8760",
@@ -54,7 +55,16 @@ async function fetchFaris(path: string, options?: RequestInit): Promise<Response
   let lastErr: any = null;
   for (const base of FARIS_SERVERS) {
     try {
-      const res = await fetch(`${base}${normPath}`, options);
+      // Port 8760 (the standalone FARIS microservice) uses wildcard CORS
+      // (origins: "*") with no supports_credentials -- sending credentials
+      // there is rejected by the browser's CORS check. Only the platform
+      // backend on 9758 is credentialed/session-aware, so credentials are
+      // attached only for that target.
+      const isPlatformBackend = base.includes("9758");
+      const mergedOptions: RequestInit | undefined = isPlatformBackend
+        ? { ...options, credentials: "include" }
+        : options;
+      const res = await fetch(`${base}${normPath}`, mergedOptions);
       return res;
     } catch (err) {
       lastErr = err;
@@ -114,6 +124,10 @@ interface CaseSummary {
 
 export default function FarisRecoveryPage() {
   const [activeTab, setActiveTab] = useState<string>("pipeline");
+  const [timelineCaseId, setTimelineCaseId] = useState<string>("");
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState<boolean>(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [engineStatus, setEngineStatus] = useState<any>(null);
   const [devices, setDevices] = useState<any[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);
@@ -164,6 +178,51 @@ export default function FarisRecoveryPage() {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
+  // Central Device Registry Status
+  const [connectedRegistryDevices, setConnectedRegistryDevices] = useState<any[]>([]);
+  // Non-null only for an authenticated Hunter with an active claimed case --
+  // used to force every recovery source in this page to the case's forensic
+  // image and to route pipeline/folder-recovery calls to the guarded
+  // case-scoped backend endpoints instead of the unrestricted FARIS microservice.
+  const [hunterActiveCase, setHunterActiveCase] = useState<any | null>(null);
+
+  const fetchRegistryStatus = useCallback(async () => {
+    try {
+      const res = await fetch("http://localhost:9758/api/devices/current", { cache: "no-store", credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setConnectedRegistryDevices(data.connected_devices || []);
+        const activeCase = data.hunter_active_case || null;
+        setHunterActiveCase(activeCase);
+        return activeCase;
+      }
+    } catch (err) {
+      console.error("Failed to load central registry status in FARIS:", err);
+    }
+    return null;
+  }, []);
+
+  const getDeviceRegistrationInfo = useCallback((devIdentifier?: string) => {
+    if (!devIdentifier) return { isRegistered: false, deviceId: null, record: null, matchedItem: null };
+    const target = devIdentifier.toLowerCase().trim();
+    const matchedItem = connectedRegistryDevices.find((item) => {
+      const devName = (item.raw_device?.name || "").toLowerCase().trim();
+      const devPath = (item.os_device_path || item.raw_device?.devicePath || "").toLowerCase().trim();
+      const devSerial = (item.raw_device?.serial || item.record?.serial_number || "").toLowerCase().trim();
+      const letters = (item.drive_letters || []).map((l: string) => l.toLowerCase().trim());
+      if (target && (devName.includes(target) || target.includes(devName))) return true;
+      if (target && devPath && (devPath.includes(target) || target.includes(devPath))) return true;
+      if (target && letters.some((l: string) => target.includes(l) || l.includes(target))) return true;
+      return false;
+    });
+    return {
+      isRegistered: matchedItem?.is_registered ?? false,
+      deviceId: matchedItem?.device_id || matchedItem?.record?.device_id || null,
+      record: matchedItem?.record || null,
+      matchedItem,
+    };
+  }, [connectedRegistryDevices]);
+
   // Read URL query params on mount for pre-populating folder scope from Storage Inspector
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -171,6 +230,13 @@ export default function FarisRecoveryPage() {
       const scopeParam = params.get("scope");
       const targetFolderParam = params.get("target_folder");
       const targetDeviceParam = params.get("target_device");
+      const caseIdParam = params.get("case_id");
+
+      if (caseIdParam) {
+        setTimelineCaseId(caseIdParam);
+        setActiveTab("timeline");
+        fetchTimeline(caseIdParam);
+      }
 
       if (scopeParam === "folder" || targetFolderParam) {
         setRecoveryScope("FOLDER");
@@ -186,12 +252,20 @@ export default function FarisRecoveryPage() {
       }
     }
     refreshEnvironment();
-  }, []);
+  }, [fetchRegistryStatus]);
 
   const refreshEnvironment = async () => {
     setLoadingStatus(true);
     setErrorMsg(null);
     try {
+      // Resolve Hunter/active-case status FIRST. The standalone FARIS
+      // microservice (port 8760) has no concept of role/case at all, so if
+      // this user is a Hunter with an active case, the device list must come
+      // from the guarded, case-scoped platform backend (9758) directly --
+      // never from the unrestricted /api/faris/devices on 8760, which would
+      // otherwise leak this Hunter's local physical devices as case sources.
+      const activeCase = await fetchRegistryStatus();
+
       // 1. Engine Inventory Status
       const engRes = await fetchFaris("/api/faris/engine-status");
       if (engRes.ok) {
@@ -201,16 +275,28 @@ export default function FarisRecoveryPage() {
         setErrorMsg(`FARIS Service not responding. Ensure FARIS backend is active.`);
       }
 
-      // 2. Discovered Physical Storage Media
-      const devRes = await fetchFaris("/api/faris/devices");
-      if (devRes.ok) {
-        const devData = await devRes.json();
-        const physicalDevs = devData.physical_devices || [];
-        setDevices(physicalDevs);
-        if (physicalDevs.length > 0 && !selectedDevice) {
-          const removable = physicalDevs.find((d: any) => d.is_removable);
-          const defaultDev = removable || physicalDevs[0];
-          setSelectedDevice(defaultDev.device_id || defaultDev.physical_path);
+      // 2. Storage Media -- case-scoped for a Hunter, real local devices otherwise
+      if (activeCase) {
+        const caseDevice = {
+          device_id: activeCase.device_id,
+          physical_path: activeCase.image_path,
+          friendly_name: `${activeCase.device_model || "Case Forensic Image"} (${activeCase.case_id})`,
+          is_removable: false,
+          is_case_image: true,
+        };
+        setDevices([caseDevice]);
+        setSelectedDevice(activeCase.image_path);
+      } else {
+        const devRes = await fetchFaris("/api/faris/devices");
+        if (devRes.ok) {
+          const devData = await devRes.json();
+          const physicalDevs = devData.physical_devices || [];
+          setDevices(physicalDevs);
+          if (physicalDevs.length > 0 && !selectedDevice) {
+            const removable = physicalDevs.find((d: any) => d.is_removable);
+            const defaultDev = removable || physicalDevs[0];
+            setSelectedDevice(defaultDev.device_id || defaultDev.physical_path);
+          }
         }
       }
 
@@ -220,10 +306,34 @@ export default function FarisRecoveryPage() {
         const casesData = await casesRes.json();
         setCases(casesData.cases || []);
       }
+
+      // 4. Central Device Registry Sync
+      await fetchRegistryStatus();
     } catch (err: any) {
       setErrorMsg(`Cannot connect to FARIS backend: ${err.message}.`);
     } finally {
       setLoadingStatus(false);
+    }
+  };
+
+  // Timeline lives only in the backend/faris SQL module (port 9758), not the
+  // standalone FARIS microservice — fetched directly rather than via fetchFaris().
+  const fetchTimeline = async (caseId: string) => {
+    if (!caseId.trim()) return;
+    setTimelineLoading(true);
+    setTimelineError(null);
+    try {
+      const res = await fetch(`http://localhost:9758/api/faris/timeline?case_id=${encodeURIComponent(caseId)}`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error((data && (data.error || data.message)) || `No timeline found for case '${caseId}'.`);
+      }
+      setTimelineEvents(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setTimelineEvents([]);
+      setTimelineError(err.message || "Failed to load timeline.");
+    } finally {
+      setTimelineLoading(false);
     }
   };
 
@@ -236,14 +346,22 @@ export default function FarisRecoveryPage() {
     setIsResolvingScope(true);
     setErrorMsg(null);
     try {
-      const res = await fetchFaris("/api/faris/folder/resolve-scope", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          folder_path: targetP.trim(),
-          target_device: devOverride || selectedDevice || undefined,
-        }),
+      const scopeBody = JSON.stringify({
+        folder_path: targetP.trim(),
+        target_device: hunterActiveCase ? hunterActiveCase.image_path : (devOverride || selectedDevice || undefined),
       });
+      const res = hunterActiveCase
+        ? await fetch("http://localhost:9758/api/faris/folder/resolve-scope", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: scopeBody,
+          })
+        : await fetchFaris("/api/faris/folder/resolve-scope", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: scopeBody,
+          });
       const data = await res.json();
       if (res.ok && data.status !== "ERROR") {
         setFolderScopeData(data);
@@ -329,11 +447,16 @@ export default function FarisRecoveryPage() {
     const interval = setInterval(async () => {
       try {
         const isFld = activeJobId.startsWith("JOB-FLD-");
-        const statusUrl = isFld
+        const statusPath = isFld
           ? `/api/faris/folder/jobs/${activeJobId}`
           : `/api/faris/pipeline/status/${activeJobId}`;
 
-        const res = await fetchFaris(statusUrl);
+        // Hunter-started jobs only exist in the guarded backend's (9758) own
+        // in-memory job store -- poll it directly rather than via fetchFaris(),
+        // which would hit the unrelated job store on the FARIS microservice (8760).
+        const res = hunterActiveCase
+          ? await fetch(`http://localhost:9758${statusPath}`, { credentials: "include" })
+          : await fetchFaris(statusPath);
         if (res.ok) {
           const job = await res.json();
           setPipelineState(job);
@@ -360,7 +483,7 @@ export default function FarisRecoveryPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeJobId, isRunning]);
+  }, [activeJobId, isRunning, hunterActiveCase]);
 
   // Auto scroll logs terminals
   useEffect(() => {
@@ -415,7 +538,11 @@ export default function FarisRecoveryPage() {
       notes: caseNotes.trim(),
       is_physical: true,
       source_type: "Physical Storage Device",
-      source_path: selectedDevice,
+      // For a Hunter, the source is ALWAYS the active case's forensic image --
+      // never whatever is selected in the (disabled) device picker. The
+      // backend re-validates and overrides this regardless; set correctly
+      // here too so the UI never even displays a mismatched intent.
+      source_path: hunterActiveCase ? hunterActiveCase.image_path : selectedDevice,
       recovery_output_path: recoveryOutputPath.trim(),
       export_destination: recoveryOutputPath.trim(),
       partition_offset: partitionOffset.trim() ? parseInt(partitionOffset.trim(), 10) : null,
@@ -429,11 +556,21 @@ export default function FarisRecoveryPage() {
       setFarisLock(true);
       setLogs([]);
 
-      const res = await fetchFaris("/api/faris/pipeline/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // A Hunter's recovery must go through the case-scoped guarded endpoint
+      // on the platform backend (9758) directly -- never through fetchFaris(),
+      // which prefers the unrestricted standalone FARIS microservice (8760).
+      const res = hunterActiveCase
+        ? await fetch("http://localhost:9758/api/faris/pipeline/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          })
+        : await fetchFaris("/api/faris/pipeline/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
       if (!res.ok) {
         const errData = await res.json();
@@ -476,7 +613,7 @@ export default function FarisRecoveryPage() {
     const payload = {
       case_id: caseNumber.trim(),
       folder_path: folderPath.trim(),
-      target_device: selectedDevice || undefined,
+      target_device: hunterActiveCase ? hunterActiveCase.image_path : (selectedDevice || undefined),
       examiner: examinerName.trim() || "Forensic Examiner",
       recovery_output_path: recoveryOutputPath.trim(),
       export_destination: recoveryOutputPath.trim(),
@@ -491,11 +628,18 @@ export default function FarisRecoveryPage() {
       setFarisLock(true);
       setLogs([]);
 
-      const res = await fetchFaris("/api/faris/folder/recover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = hunterActiveCase
+        ? await fetch("http://localhost:9758/api/faris/folder/recover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          })
+        : await fetchFaris("/api/faris/folder/recover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
       if (!res.ok) {
         const errData = await res.json();
@@ -628,7 +772,7 @@ export default function FarisRecoveryPage() {
         }}
         className="w-full space-y-6"
       >
-        <TabsList className="grid grid-cols-4 w-full h-11 bg-muted/60 p-1">
+        <TabsList className="grid grid-cols-5 w-full h-11 bg-muted/60 p-1">
           <TabsTrigger value="pipeline" className="gap-2 text-xs md:text-sm">
             <Play className="w-4 h-4" />
             Recovery Pipeline
@@ -674,6 +818,20 @@ export default function FarisRecoveryPage() {
           >
             {isRunning ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <ShieldCheck className="w-4 h-4" />}
             Chain of Custody & Audit
+          </TabsTrigger>
+          <TabsTrigger
+            value="timeline"
+            disabled={isRunning}
+            onClick={(e) => {
+              if (isRunning) {
+                e.preventDefault();
+                showNavigationLockedAlert();
+              }
+            }}
+            className={cn("gap-2 text-xs md:text-sm", isRunning && "opacity-60 cursor-not-allowed")}
+          >
+            {isRunning ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <Clock className="w-4 h-4" />}
+            Timeline
           </TabsTrigger>
         </TabsList>
 
@@ -886,6 +1044,14 @@ export default function FarisRecoveryPage() {
                       </div>
                     )}
 
+                    {folderScopeData?.device_path && (
+                      <InlineDeviceRegistryBadge
+                        selectedDeviceIdentifier={folderScopeData.device_path}
+                        className="mt-2"
+                        compact={true}
+                      />
+                    )}
+
                     {/* Forensic Methods Checklist */}
                     <div className="space-y-1.5 pt-1">
                       <label className="text-xs font-semibold text-muted-foreground">Forensic Recovery Methods</label>
@@ -933,9 +1099,27 @@ export default function FarisRecoveryPage() {
                   /* Scope: DEVICE Physical Media Selector */
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Select Target Physical Storage Device *
+                      {hunterActiveCase ? "Active Case Forensic Source (Locked)" : "Select Target Physical Storage Device *"}
                     </label>
-                    {devices.length === 0 ? (
+                    {hunterActiveCase ? (
+                      <div className="p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-950/20 space-y-1.5 text-xs font-mono">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-emerald-300">{hunterActiveCase.case_id}</span>
+                          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
+                            READ-ONLY FORENSIC IMAGE
+                          </Badge>
+                        </div>
+                        <div className="text-muted-foreground">Device: <span className="text-foreground">{hunterActiveCase.device_id}</span></div>
+                        <div className="text-muted-foreground">Source: <span className="text-foreground">{hunterActiveCase.image_filename || hunterActiveCase.image_path}</span></div>
+                        {hunterActiveCase.sha256 && (
+                          <div className="text-muted-foreground truncate">SHA-256: <span className="text-foreground">{hunterActiveCase.sha256}</span></div>
+                        )}
+                        <p className="text-[10px] text-emerald-200/70 pt-1">
+                          As a Hunter operating on an active case, local physical devices cannot be selected --
+                          this forensic image is the only authorized source.
+                        </p>
+                      </div>
+                    ) : devices.length === 0 ? (
                       <div className="p-3 bg-muted/50 border rounded-md text-xs text-muted-foreground text-center">
                         Scanning storage subsystem... No physical drives found.
                       </div>
@@ -945,11 +1129,14 @@ export default function FarisRecoveryPage() {
                         onChange={(e) => setSelectedDevice(e.target.value)}
                         className="w-full p-2.5 bg-background border rounded-md text-xs font-mono"
                       >
-                        {devices.map((d: any, idx: number) => (
-                          <option key={idx} value={d.device_id || d.physical_path}>
-                            {d.model} ({d.size_formatted}) [{d.drive_letters || "No Volume"}] — {d.device_id}
-                          </option>
-                        ))}
+                        {devices.map((d: any, idx: number) => {
+                          const reg = getDeviceRegistrationInfo(d.device_id || d.physical_path || d.drive_letters);
+                          return (
+                            <option key={idx} value={d.device_id || d.physical_path}>
+                              {reg.isRegistered ? `[${reg.deviceId}]` : "[UNREGISTERED]"} {d.model} ({d.size_formatted}) [{d.drive_letters || "No Volume"}]
+                            </option>
+                          );
+                        })}
                       </select>
                     )}
                     {getSelectedDeviceObj() && (
@@ -959,6 +1146,34 @@ export default function FarisRecoveryPage() {
                         <div>Interface: {getSelectedDeviceObj()?.interface} | Type: {getSelectedDeviceObj()?.device_type}</div>
                         <div>Serial: {getSelectedDeviceObj()?.serial_number} | Volume: {getSelectedDeviceObj()?.drive_letters}</div>
                       </div>
+                    )}
+
+                    {/* Unregistered Device Gating Alert */}
+                    {!hunterActiveCase && selectedDevice && !getDeviceRegistrationInfo(selectedDevice).isRegistered && (
+                      <div className="p-3.5 rounded-xl border border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-[#0B1220] to-[#0D1527] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-lg">
+                        <div className="flex items-start sm:items-center gap-2.5">
+                          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                          <div>
+                            <div className="font-bold text-amber-300">Registration Required for Device Recovery</div>
+                            <p className="text-[11px] text-amber-200/80 mt-0.5">
+                              Register the device to proceed with the operation. Only central registry verified media can be targeted for forensic acquisition.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] font-mono shrink-0">
+                          REGISTRATION REQUIRED
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Central Device Registry Inline Identity */}
+                    {!hunterActiveCase && selectedDevice && (
+                      <InlineDeviceRegistryBadge
+                        selectedDeviceIdentifier={selectedDevice}
+                        rawDevice={getSelectedDeviceObj()}
+                        onRegistrationComplete={fetchRegistryStatus}
+                        className="mt-2"
+                      />
                     )}
                   </div>
                 )}
@@ -1025,13 +1240,22 @@ export default function FarisRecoveryPage() {
               <CardFooter>
                 <Button
                   onClick={recoveryScope === "FOLDER" ? handleStartFolderRecovery : handleStartPipeline}
-                  disabled={isRunning}
-                  className="w-full gap-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow"
+                  disabled={isRunning || (recoveryScope === "DEVICE" && !hunterActiveCase && !getDeviceRegistrationInfo(selectedDevice).isRegistered)}
+                  className={`w-full gap-2 font-semibold shadow ${
+                    recoveryScope === "DEVICE" && !hunterActiveCase && !getDeviceRegistrationInfo(selectedDevice).isRegistered
+                      ? "bg-amber-600/70 hover:bg-amber-600/70 cursor-not-allowed text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
                 >
                   {isRunning ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
                       Executing Recovery ({formatElapsed(elapsedSeconds)})...
+                    </>
+                  ) : recoveryScope === "DEVICE" && !getDeviceRegistrationInfo(selectedDevice).isRegistered ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-amber-200" />
+                      REGISTER DEVICE TO PROCEED WITH RECOVERY
                     </>
                   ) : (
                     <>
@@ -1373,6 +1597,69 @@ export default function FarisRecoveryPage() {
               <p className="text-xs text-muted-foreground">
                 All forensic actions, scope resolutions, carving operations, and exports are recorded in immutable SHA-256 hash-chained ledgers.
               </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 5: FORENSIC TIMELINE */}
+        <TabsContent value="timeline" className="space-y-6">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                Forensic Timeline
+              </CardTitle>
+              <CardDescription>
+                Timestamped events extracted from recovered records for a case. Deep-linked from the Evidence
+                Relationship Graph, or enter a Case ID below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Case ID (e.g. from a FARIS scan job)"
+                  value={timelineCaseId}
+                  onChange={(e) => setTimelineCaseId(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && fetchTimeline(timelineCaseId)}
+                  className="text-xs h-9"
+                />
+                <Button size="sm" onClick={() => fetchTimeline(timelineCaseId)} disabled={timelineLoading}>
+                  {timelineLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : "Load Timeline"}
+                </Button>
+              </div>
+
+              {timelineError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{timelineError}</span>
+                </div>
+              )}
+
+              {!timelineLoading && !timelineError && timelineEvents.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No timeline events loaded yet. Timeline events are extracted from recovered records that contain
+                  plausible timestamps during a FARIS scan job.
+                </p>
+              )}
+
+              <div className="space-y-2">
+                {timelineEvents.map((ev: any) => (
+                  <div key={ev.event_id} className="p-3 border rounded-lg bg-card flex items-start gap-3">
+                    <Clock className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-mono font-bold">{ev.timestamp_str}</span>
+                        <Badge variant={ev.is_inferred ? "secondary" : "default"} className="text-[10px]">
+                          {ev.is_inferred ? "CORRELATED" : "DIRECT"}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">{ev.event_type}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 truncate">{ev.summary}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{ev.confidence}%</span>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
