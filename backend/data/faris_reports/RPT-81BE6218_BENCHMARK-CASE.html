@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FARIS Forensic Recovery Report - Evaluation Benchmark</title>
+<style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px; }
+    .container { max-width: 1100px; margin: 0 auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 40px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+    .header { border-bottom: 2px solid #3b82f6; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+    .title { font-size: 24px; font-weight: bold; color: #60a5fa; margin: 0; }
+    .subtitle { font-size: 14px; color: #94a3b8; margin-top: 4px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 30px; }
+    .meta-card { background: #0f172a; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
+    .meta-card .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; }
+    .meta-card .val { font-size: 16px; font-weight: 600; color: #f8fafc; margin-top: 4px; word-break: break-all; }
+    h2 { font-size: 18px; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-top: 36px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #0f172a; color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+    .badge { padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; display: inline-block; }
+    .badge-high { background: #065f46; color: #34d399; border: 1px solid #059669; }
+    .badge-medium { background: #854d0e; color: #facc15; border: 1px solid #ca8a04; }
+    .badge-low { background: #991b1b; color: #f87171; border: 1px solid #dc2626; }
+    .badge-candidate { background: #374151; color: #9ca3af; }
+    .tag-explicit { background: #1e3a8a; color: #93c5fd; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; }
+    .tag-inferred { background: #713f12; color: #fde047; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; }
+    .timeline { list-style: none; padding-left: 0; margin-top: 16px; }
+    .timeline-item { padding: 12px 16px; background: #0f172a; border-left: 3px solid #38bdf8; margin-bottom: 8px; border-radius: 0 6px 6px 0; }
+    .timeline-time { font-weight: 600; color: #38bdf8; font-size: 13px; }
+    .timeline-content { margin-top: 4px; color: #cbd5e1; font-size: 13px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #334155; font-size: 12px; color: #64748b; text-align: center; }
+    @media print {
+        body { background: #fff; color: #000; padding: 0; }
+        .container { background: #fff; border: none; box-shadow: none; padding: 0; }
+        .meta-card { background: #f8fafc; border-color: #cbd5e1; }
+        .meta-card .val { color: #0f172a; }
+        th { background: #f1f5f9; color: #475569; }
+        td, th { border-color: #e2e8f0; }
+        .timeline-item { background: #f8fafc; border-left-color: #0284c7; }
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1 class="title">FARIS Forensic Recovery & Integrity Report</h1>
+            <div class="subtitle">Forensic Artifact Recovery & Integrity System — 1.0.0</div>
+        </div>
+        <div style="text-align: right;">
+            <div class="mono" style="color: #38bdf8; font-weight: bold;">RPT-81BE6218</div>
+            <div style="font-size: 12px; color: #94a3b8;">Generated: 2026-09-05 18:14:58 UTC</div>
+        </div>
+    </div>
+
+    <div class="meta-grid">
+        <div class="meta-card">
+            <div class="label">Case Name</div>
+            <div class="val">Evaluation Benchmark</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">BENCHMARK-CASE</div>
+        </div>
+        <div class="meta-card">
+            <div class="label">Evidence File</div>
+            <div class="val">damaged_header_wipe_988e1c.raw</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">16,384 bytes</div>
+        </div>
+        <div class="meta-card">
+            <div class="label">Evidence SHA-256</div>
+            <div class="val mono" style="font-size: 11px;">EVAL_HASH</div>
+        </div>
+        <div class="meta-card">
+            <div class="label">Recovery Mode</div>
+            <div class="val" style="color: #38bdf8;">Header-Damaged</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Page Size: 4096B</div>
+        </div>
+        <div class="meta-card">
+            <div class="label">SQLite Pages Detected</div>
+            <div class="val">3 / 4</div>
+        </div>
+        <div class="meta-card">
+            <div class="label">Records Recovered</div>
+            <div class="val" style="color: #34d399;">35</div>
+        </div>
+    </div>
+
+    <h2>1. Recovered Evidence Artifacts (35 Records)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Record ID</th>
+                <th>Row ID</th>
+                <th>Confidence</th>
+                <th>Byte Offset</th>
+                <th>Location</th>
+                <th>Carved Values</th>
+            </tr>
+        </thead>
+        <tbody>
+            
+                <tr>
+                    <td class="mono">REC-B8F338D438</td>
+                    <td>1</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003FE3</td>
+                    <td>Page 4 (Cell #0)</td>
+                    <td class="mono values-cell">None, 1000, 150, 'USD', 'COMPLETED', 1787200000</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-08B820F586</td>
+                    <td>2</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003FC0</td>
+                    <td>Page 4 (Cell #1)</td>
+                    <td class="mono values-cell">None, 1001, 174.5, 'USD', 'COMPLETED', 1787203600</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-209C4373A0</td>
+                    <td>3</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003FA3</td>
+                    <td>Page 4 (Cell #2)</td>
+                    <td class="mono values-cell">None, 1002, 199, 'USD', 'COMPLETED', 1787207200</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-C450B89562</td>
+                    <td>4</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003F80</td>
+                    <td>Page 4 (Cell #3)</td>
+                    <td class="mono values-cell">None, 1003, 223.5, 'USD', 'COMPLETED', 1787210800</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-BBBB73A49E</td>
+                    <td>5</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003F63</td>
+                    <td>Page 4 (Cell #4)</td>
+                    <td class="mono values-cell">None, 1004, 248, 'USD', 'COMPLETED', 1787214400</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-5C9C892357</td>
+                    <td>6</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003F40</td>
+                    <td>Page 4 (Cell #5)</td>
+                    <td class="mono values-cell">None, 1000, 272.5, 'USD', 'COMPLETED', 1787218000</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-CB689FC32B</td>
+                    <td>7</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003F23</td>
+                    <td>Page 4 (Cell #6)</td>
+                    <td class="mono values-cell">None, 1001, 297, 'USD', 'COMPLETED', 1787221600</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-A9BD9BA447</td>
+                    <td>8</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003F00</td>
+                    <td>Page 4 (Cell #7)</td>
+                    <td class="mono values-cell">None, 1002, 321.5, 'USD', 'COMPLETED', 1787225200</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-A9BE819C05</td>
+                    <td>9</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003EE3</td>
+                    <td>Page 4 (Cell #8)</td>
+                    <td class="mono values-cell">None, 1003, 346, 'USD', 'COMPLETED', 1787228800</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-D3CF711945</td>
+                    <td>10</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003EC0</td>
+                    <td>Page 4 (Cell #9)</td>
+                    <td class="mono values-cell">None, 1004, 370.5, 'USD', 'COMPLETED', 1787232400</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-871A56F80D</td>
+                    <td>11</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003EA3</td>
+                    <td>Page 4 (Cell #10)</td>
+                    <td class="mono values-cell">None, 1000, 395, 'USD', 'COMPLETED', 1787236000</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-D1D3868757</td>
+                    <td>12</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003E80</td>
+                    <td>Page 4 (Cell #11)</td>
+                    <td class="mono values-cell">None, 1001, 419.5, 'USD', 'COMPLETED', 1787239600</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-864C0694CA</td>
+                    <td>13</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003E63</td>
+                    <td>Page 4 (Cell #12)</td>
+                    <td class="mono values-cell">None, 1002, 444, 'USD', 'COMPLETED', 1787243200</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-F7CE08A5B7</td>
+                    <td>14</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003E40</td>
+                    <td>Page 4 (Cell #13)</td>
+                    <td class="mono values-cell">None, 1003, 468.5, 'USD', 'COMPLETED', 1787246800</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-BB0C679804</td>
+                    <td>15</td>
+                    <td><span class='badge badge-high'>85.8% (High)</span></td>
+                    <td class="mono">0x00003E23</td>
+                    <td>Page 4 (Cell #14)</td>
+                    <td class="mono values-cell">None, 1004, 493, 'USD', 'COMPLETED', 1787250400</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-873E9BDE77</td>
+                    <td>1</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00001FBB</td>
+                    <td>Page 2 (Cell #0)</td>
+                    <td class="mono values-cell">None, 'alice_sec', 'alice@enterprise.org', 'Administrator', '2026-08-15 08:30:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-AD7B0299BC</td>
+                    <td>2</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00001F7F</td>
+                    <td>Page 2 (Cell #1)</td>
+                    <td class="mono values-cell">None, 'bob_ops', 'bob@enterprise.org', 'Operator', '2026-08-15 09:15:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-CA4DBA6494</td>
+                    <td>3</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00001F3A</td>
+                    <td>Page 2 (Cell #2)</td>
+                    <td class="mono values-cell">None, 'charlie_audit', 'charlie@enterprise.org', 'Auditor', '2026-08-15 10:00:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-8DB0F91267</td>
+                    <td>4</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00001EFA</td>
+                    <td>Page 2 (Cell #3)</td>
+                    <td class="mono values-cell">None, 'david_dev', 'david@enterprise.org', 'Engineer', '2026-08-15 11:20:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-9440B2776A</td>
+                    <td>5</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00001EAF</td>
+                    <td>Page 2 (Cell #4)</td>
+                    <td class="mono values-cell">None, 'eva_analyst', 'eva@enterprise.org', 'Forensic Specialist', '2026-08-15 12:45:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-4197F186FB</td>
+                    <td>1</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002F9A</td>
+                    <td>Page 3 (Cell #0)</td>
+                    <td class="mono values-cell">None, 'alice_sec', 'bob_ops', 'Confirming server maintenance window at 22:00 UTC [Seq #1]', '2026-08-20 14:10:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-603B07D504</td>
+                    <td>2</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002F2B</td>
+                    <td>Page 3 (Cell #1)</td>
+                    <td class="mono values-cell">None, 'bob_ops', 'alice_sec', 'Backup snapshot completed successfully before routine wipe [Seq #2]', '2026-08-20 14:15:22'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-6AFA4E8372</td>
+                    <td>3</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002EC2</td>
+                    <td>Page 3 (Cell #2)</td>
+                    <td class="mono values-cell">None, 'charlie_audit', 'alice_sec', 'Audit certificate request for compliance review [Seq #3]', '2026-08-21 09:04:10'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-ABC1685678</td>
+                    <td>4</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002E58</td>
+                    <td>Page 3 (Cell #3)</td>
+                    <td class="mono values-cell">None, 'david_dev', 'bob_ops', 'Deploying forensic module FARIS to production cluster [Seq #4]', '2026-08-21 10:30:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-B3F3E1E085</td>
+                    <td>5</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002DE7</td>
+                    <td>Page 3 (Cell #4)</td>
+                    <td class="mono values-cell">None, 'eva_analyst', 'charlie_audit', 'Chain of custody log verified with SHA-256 integrity [Seq #5]', '2026-08-21 16:45:11'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-327A2ACF1B</td>
+                    <td>6</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002D7F</td>
+                    <td>Page 3 (Cell #5)</td>
+                    <td class="mono values-cell">None, 'alice_sec', 'david_dev', 'Security verification test scheduled for tomorrow [Seq #6]', '2026-08-22 08:12:30'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-EB3E3CC51D</td>
+                    <td>7</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002D1C</td>
+                    <td>Page 3 (Cell #6)</td>
+                    <td class="mono values-cell">None, 'bob_ops', 'eva_analyst', 'Target device HP v236w connected to port 8743 [Seq #7]', '2026-08-22 11:00:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-81F48D043C</td>
+                    <td>8</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002CB8</td>
+                    <td>Page 3 (Cell #7)</td>
+                    <td class="mono values-cell">None, 'charlie_audit', 'david_dev', 'Report generated for forensic case archive [Seq #8]', '2026-08-22 15:20:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-129DE37044</td>
+                    <td>9</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002C52</td>
+                    <td>Page 3 (Cell #8)</td>
+                    <td class="mono values-cell">None, 'alice_sec', 'bob_ops', 'Confirming server maintenance window at 22:00 UTC [Seq #9]', '2026-08-20 14:10:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-D497CCD077</td>
+                    <td>10</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002BE2</td>
+                    <td>Page 3 (Cell #9)</td>
+                    <td class="mono values-cell">None, 'bob_ops', 'alice_sec', 'Backup snapshot completed successfully before routine wipe [Seq #10]', '2026-08-20 14:15:22'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-4C5E16CC9B</td>
+                    <td>11</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002B78</td>
+                    <td>Page 3 (Cell #10)</td>
+                    <td class="mono values-cell">None, 'charlie_audit', 'alice_sec', 'Audit certificate request for compliance review [Seq #11]', '2026-08-21 09:04:10'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-A1537405B9</td>
+                    <td>12</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002B0D</td>
+                    <td>Page 3 (Cell #11)</td>
+                    <td class="mono values-cell">None, 'david_dev', 'bob_ops', 'Deploying forensic module FARIS to production cluster [Seq #12]', '2026-08-21 10:30:00'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-2F3D99A4E4</td>
+                    <td>13</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002A9B</td>
+                    <td>Page 3 (Cell #12)</td>
+                    <td class="mono values-cell">None, 'eva_analyst', 'charlie_audit', 'Chain of custody log verified with SHA-256 integrity [Seq #13]', '2026-08-21 16:45:11'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-F3F024F66A</td>
+                    <td>14</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x00002A32</td>
+                    <td>Page 3 (Cell #13)</td>
+                    <td class="mono values-cell">None, 'alice_sec', 'david_dev', 'Security verification test scheduled for tomorrow [Seq #14]', '2026-08-22 08:12:30'</td>
+                </tr>
+                
+                <tr>
+                    <td class="mono">REC-2CF40AEAE9</td>
+                    <td>15</td>
+                    <td><span class='badge badge-high'>85.0% (High)</span></td>
+                    <td class="mono">0x000029CE</td>
+                    <td>Page 3 (Cell #14)</td>
+                    <td class="mono values-cell">None, 'bob_ops', 'eva_analyst', 'Target device HP v236w connected to port 8743 [Seq #15]', '2026-08-22 11:00:00'</td>
+                </tr>
+                
+        </tbody>
+    </table>
+
+    <h2>2. Forensic Chronological Timeline</h2>
+    <ul class="timeline">
+        
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-15 08:30:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: alice_sec | alice@enterprise.org | Administrator</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-15 09:15:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: bob_ops | bob@enterprise.org | Operator</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-15 10:00:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: charlie_audit | charlie@enterprise.org | Auditor</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-15 11:20:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: david_dev | david@enterprise.org | Engineer</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-15 12:45:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: eva_analyst | eva@enterprise.org | Forensic Specialist</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 04:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 05:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 06:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 07:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 08:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 09:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 10:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 11:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 12:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 13:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 14:10:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: alice_sec | bob_ops | Confirming server maintenance window at 22:00 UTC [Seq #1]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 14:10:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: alice_sec | bob_ops | Confirming server maintenance window at 22:00 UTC [Seq #9]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 14:15:22</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: bob_ops | alice_sec | Backup snapshot completed successfully before routine wipe [Seq #2]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 14:15:22</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: bob_ops | alice_sec | Backup snapshot completed successfully before routine wipe [Seq #10]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 14:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 15:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 16:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 17:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-20 18:26:40 UTC</span>
+                    <span class='tag-inferred'>Inferred</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: USD | COMPLETED</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 09:04:10</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: charlie_audit | alice_sec | Audit certificate request for compliance review [Seq #3]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 09:04:10</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: charlie_audit | alice_sec | Audit certificate request for compliance review [Seq #11]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 10:30:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: david_dev | bob_ops | Deploying forensic module FARIS to production cluster [Seq #4]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 10:30:00</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: david_dev | bob_ops | Deploying forensic module FARIS to production cluster [Seq #12]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 16:45:11</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: eva_analyst | charlie_audit | Chain of custody log verified with SHA-256 integrity [Seq #5]</div>
+                </li>
+                
+                <li class="timeline-item">
+                    <span class="timeline-time">2026-08-21 16:45:11</span>
+                    <span class='tag-explicit'>Explicit</span>
+                    <div class="timeline-content"><strong>Artifact Timestamp</strong>: eva_analyst | charlie_audit | Chain of custody log verified with SHA-256 integrity [Seq #13]</div>
+                </li>
+                
+    </ul>
+
+    <h2>3. Chain of Custody & Hash Audit Trail</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Seq</th>
+                <th>Timestamp</th>
+                <th>Action</th>
+                <th>Details</th>
+                <th>SHA-256 Hash</th>
+            </tr>
+        </thead>
+        <tbody>
+            
+                <tr>
+                    <td>#1</td>
+                    <td>2026-08-31 11:54:26 UTC</td>
+                    <td><strong>SCAN_STARTED</strong></td>
+                    <td>Initiated Header-Damaged recovery scan on 'damaged_header_wipe_988e1c.raw' (Page size: 4096B, Total expected pages: 4)</td>
+                    <td class="mono hash-cell">F638C4F4CAF2748E...F7C8A291</td>
+                </tr>
+                
+                <tr>
+                    <td>#2</td>
+                    <td>2026-08-31 11:54:27 UTC</td>
+                    <td><strong>SCAN_COMPLETED</strong></td>
+                    <td>Completed Header-Damaged recovery scan: 3 valid SQLite pages, 35 records recovered in 0.1s</td>
+                    <td class="mono hash-cell">A5C44A5B6A1355D9...B656F245</td>
+                </tr>
+                
+                <tr>
+                    <td>#3</td>
+                    <td>2026-08-31 11:54:27 UTC</td>
+                    <td><strong>SCAN_STARTED</strong></td>
+                    <td>Initiated Header-Damaged recovery scan on 'damaged_header_wipe_238604.raw' (Page size: 4096B, Total expected pages: 4)</td>
+                    <td class="mono hash-cell">D5097B58482084A0...3672A44A</td>
+                </tr>
+                
+                <tr>
+                    <td>#4</td>
+                    <td>2026-08-31 11:54:27 UTC</td>
+                    <td><strong>SCAN_COMPLETED</strong></td>
+                    <td>Completed Header-Damaged recovery scan: 3 valid SQLite pages, 25 records recovered in 0.09s</td>
+                    <td class="mono hash-cell">A3E3EA4753E83524...CE9F6F58</td>
+                </tr>
+                
+                <tr>
+                    <td>#5</td>
+                    <td>2026-09-05 18:14:58 UTC</td>
+                    <td><strong>SCAN_STARTED</strong></td>
+                    <td>Initiated Header-Damaged recovery scan on 'damaged_header_wipe_de5d8f.raw' (Page size: 4096B, Total expected pages: 4)</td>
+                    <td class="mono hash-cell">3E7C215934912839...5B6B0D0F</td>
+                </tr>
+                
+                <tr>
+                    <td>#6</td>
+                    <td>2026-09-05 18:14:58 UTC</td>
+                    <td><strong>SCAN_COMPLETED</strong></td>
+                    <td>Completed Header-Damaged recovery scan: 3 valid SQLite pages, 35 records recovered in 0.07s</td>
+                    <td class="mono hash-cell">0E81FE2CB0794F1E...16A40B86</td>
+                </tr>
+                
+                <tr>
+                    <td>#7</td>
+                    <td>2026-09-05 18:14:58 UTC</td>
+                    <td><strong>SCAN_STARTED</strong></td>
+                    <td>Initiated Header-Damaged recovery scan on 'damaged_header_wipe_6d9cb5.raw' (Page size: 4096B, Total expected pages: 4)</td>
+                    <td class="mono hash-cell">6A1DB169324AB253...6EBB778D</td>
+                </tr>
+                
+                <tr>
+                    <td>#8</td>
+                    <td>2026-09-05 18:14:58 UTC</td>
+                    <td><strong>SCAN_COMPLETED</strong></td>
+                    <td>Completed Header-Damaged recovery scan: 3 valid SQLite pages, 25 records recovered in 0.06s</td>
+                    <td class="mono hash-cell">C550B941F784C8C3...9BDCB7FC</td>
+                </tr>
+                
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Report generated by FARIS (FARIS-Carver-2026.1). Original evidence is preserved read-only.
+    </div>
+</div>
+</body>
+</html>

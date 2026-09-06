@@ -69,15 +69,21 @@ class ArtifactDiscoveryEngine:
             return discovered
 
         # Regex for fls lines:
-        # Format: d/d * 4-144-1: dirname  OR  r/r 7: filename.ext  OR  r/- * 8: _deleted.ext
-        line_pattern = re.compile(r"^\s*([a-z\-\*\+]+/[a-z\-\*\+]+)\s+(\*?\s*)([\d\-\(\)]+):\s*(.+)$")
+        # Handles:
+        #   d/d * 4-144-1: dirname
+        #   + r/r 5: folder/subfile.docx
+        #   ++ r/r 6: folder/sub/report.pdf
+        #   + d/d 7: folder/sub
+        #   + r/- * 8: folder/_deleted.txt
+        #   r/r 9(realloc): file.xlsx
+        line_pattern = re.compile(r"^\s*([\+\*]*\s*)([a-z\-\*\+]+/[a-z\-\*\+]+)\s+(\*?\s*)([\d\-\(\)\w]+):\s*(.+)$")
 
         for line in res.stdout.splitlines():
             l = line.strip()
             match = line_pattern.match(l)
             if match:
-                entry_type, del_marker, inode, filepath = match.groups()
-                is_deleted = "*" in del_marker or "-" in entry_type or entry_type.startswith("r/-")
+                prefix, entry_type, del_marker, inode, filepath = match.groups()
+                is_deleted = "*" in del_marker or "*" in prefix or "-" in entry_type or entry_type.startswith("r/-")
                 is_dir = entry_type.startswith("d")
                 clean_name = filepath.strip()
                 inode_clean = inode.strip()

@@ -1,0 +1,2 @@
+Relative Path,File Name,State,Status,Size (Bytes),SHA-256,Starting Cluster,Starting LBA,Ending LBA,Recovery Method,Recovery Source,Validation Status,Integrity Verified
+audit.log,audit.log,ACTIVE,RECOVERED,16,c1f62252892c3fc59601375b5536d158a36f6ce08a21df01e4d73dc51c4152fe,N/A,N/A,N/A,Active Filesystem Allocation,Pass 1A (Active Filesystem),VALID (UTF-8 Plaintext Structure Intact),True

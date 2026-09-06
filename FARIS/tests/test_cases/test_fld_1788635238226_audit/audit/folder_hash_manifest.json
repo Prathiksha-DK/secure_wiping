@@ -1,0 +1,13 @@
+{
+  "case_id": "test_fld_1788635238226_audit",
+  "scope": "FOLDER",
+  "generated_at": "2026-09-05T19:07:18.294338+00:00",
+  "manifest_entries": [
+    {
+      "item": "audit.log",
+      "size_bytes": 16,
+      "sha256": "c1f62252892c3fc59601375b5536d158a36f6ce08a21df01e4d73dc51c4152fe",
+      "source": "Pass 1A (Active Filesystem)"
+    }
+  ]
+}

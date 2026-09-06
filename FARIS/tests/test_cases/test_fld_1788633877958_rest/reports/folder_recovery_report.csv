@@ -1,0 +1,2 @@
+Relative Path,File Name,Status,Size (Bytes),SHA-256,Starting Cluster,Starting LBA,Ending LBA,Recovery Source,Integrity Verified
+item.txt,item.txt,RECOVERED,14,ad68c05ff8657955d2ab9ca73cb58f388e6967dfbaf8c2b89fcdc1617ebdd1a0,N/A,N/A,N/A,Pass 1 (Filesystem Allocation),True

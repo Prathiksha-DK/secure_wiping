@@ -23,26 +23,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": None,
         "max_size": 100 * 1024 * 1024,  # 100 MB
-        "sector_aligned": True
-    },
-    {
-        "type": "jpeg",
-        "name": "JPEG Image",
-        "ext": "jpg",
-        "header": b"\xFF\xD8\xFF",
-        "header_offset": 0,
-        "footer": b"\xFF\xD9",
-        "max_size": 30 * 1024 * 1024,  # 30 MB
-        "sector_aligned": True
-    },
-    {
-        "type": "png",
-        "name": "PNG Image",
-        "ext": "png",
-        "header": b"\x89PNG\r\n\x1a\n",
-        "header_offset": 0,
-        "footer": b"IEND\xaeB`\x82",
-        "max_size": 30 * 1024 * 1024,
+        "min_size": 512,
         "sector_aligned": True
     },
     {
@@ -53,16 +34,62 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": b"%%EOF",
         "max_size": 50 * 1024 * 1024,
+        "min_size": 32,
         "sector_aligned": True
     },
     {
         "type": "zip",
-        "name": "ZIP Archive / Office Document",
-        "ext": "zip",
+        "name": "Office Document / ZIP Archive",
+        "ext": "docx",
         "header": b"PK\x03\x04",
         "header_offset": 0,
         "footer": b"PK\x05\x06",
         "max_size": 100 * 1024 * 1024,
+        "min_size": 256,
+        "sector_aligned": True
+    },
+    {
+        "type": "ole",
+        "name": "Legacy Office / Compound Binary",
+        "ext": "doc",
+        "header": b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1",
+        "header_offset": 0,
+        "footer": None,
+        "max_size": 50 * 1024 * 1024,
+        "min_size": 1536,
+        "sector_aligned": True
+    },
+    {
+        "type": "rtf",
+        "name": "Rich Text Format Document",
+        "ext": "rtf",
+        "header": b"{\\rtf1",
+        "header_offset": 0,
+        "footer": b"}",
+        "max_size": 30 * 1024 * 1024,
+        "min_size": 64,
+        "sector_aligned": True
+    },
+    {
+        "type": "jpeg",
+        "name": "JPEG Image",
+        "ext": "jpg",
+        "header": b"\xFF\xD8\xFF",
+        "header_offset": 0,
+        "footer": b"\xFF\xD9",
+        "max_size": 30 * 1024 * 1024,  # 30 MB
+        "min_size": 2048,  # Filter out tiny thumbnail fragments / junk noise
+        "sector_aligned": True
+    },
+    {
+        "type": "png",
+        "name": "PNG Image",
+        "ext": "png",
+        "header": b"\x89PNG\r\n\x1a\n",
+        "header_offset": 0,
+        "footer": b"IEND\xaeB`\x82",
+        "max_size": 30 * 1024 * 1024,
+        "min_size": 1024,  # Filter out tiny junk noise
         "sector_aligned": True
     },
     {
@@ -73,6 +100,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": None,
         "max_size": 100 * 1024 * 1024,
+        "min_size": 512,
         "sector_aligned": True
     },
     {
@@ -83,6 +111,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": b"\x00;",
         "max_size": 20 * 1024 * 1024,
+        "min_size": 512,
         "sector_aligned": True
     },
     {
@@ -93,6 +122,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": b"\x00;",
         "max_size": 20 * 1024 * 1024,
+        "min_size": 512,
         "sector_aligned": True
     },
     {
@@ -103,6 +133,7 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": None,
         "max_size": 64 * 1024 * 1024,
+        "min_size": 4096,
         "sector_aligned": True
     },
     {
@@ -113,19 +144,61 @@ SIGNATURES = [
         "header_offset": 0,
         "footer": None,
         "max_size": 64 * 1024 * 1024,
-        "sector_aligned": True
-    },
-    {
-        "type": "ole",
-        "name": "Compound Binary / Legacy Office",
-        "ext": "ole",
-        "header": b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1",
-        "header_offset": 0,
-        "footer": None,
-        "max_size": 50 * 1024 * 1024,
+        "min_size": 4096,
         "sector_aligned": True
     }
 ]
+
+
+def classify_carved_payload(sig_type: str, data: bytes) -> Tuple[str, str, str]:
+    """
+    Inspects carved payload bytes to determine exact document sub-type and extension.
+    Returns: (display_name, type_code, file_extension)
+    """
+    if sig_type == "zip":
+        # Scan for Office Open XML structures
+        if b"word/" in data or b"word/document.xml" in data:
+            return "Microsoft Word Document (.docx)", "docx", "docx"
+        elif b"xl/" in data or b"xl/workbook.xml" in data:
+            return "Microsoft Excel Spreadsheet (.xlsx)", "xlsx", "xlsx"
+        elif b"ppt/" in data or b"ppt/presentation.xml" in data:
+            return "Microsoft PowerPoint Presentation (.pptx)", "pptx", "pptx"
+        elif b"META-INF/MANIFEST.MF" in data:
+            return "Java Archive (.jar)", "jar", "jar"
+        else:
+            return "ZIP Archive (.zip)", "zip", "zip"
+
+    elif sig_type == "ole":
+        # Scan for legacy Office streams
+        if b"WordDocument" in data:
+            return "Legacy Microsoft Word Document (.doc)", "doc", "doc"
+        elif b"Workbook" in data or b"Book" in data:
+            return "Legacy Microsoft Excel Spreadsheet (.xls)", "xls", "xls"
+        elif b"PowerPoint Document" in data:
+            return "Legacy Microsoft PowerPoint (.ppt)", "ppt", "ppt"
+        else:
+            return "Compound Binary Document (.ole)", "ole", "ole"
+
+    elif sig_type == "pdf":
+        return "PDF Document (.pdf)", "pdf", "pdf"
+    elif sig_type == "rtf":
+        return "Rich Text Document (.rtf)", "rtf", "rtf"
+    elif sig_type == "jpeg":
+        return "JPEG Image (.jpg)", "jpeg", "jpg"
+    elif sig_type == "png":
+        return "PNG Image (.png)", "png", "png"
+    elif sig_type == "sqlite":
+        return "SQLite Database (.sqlite)", "sqlite", "sqlite"
+    elif sig_type == "7z":
+        return "7-Zip Archive (.7z)", "7z", "7z"
+    elif sig_type in ("gif89a", "gif87a"):
+        return "GIF Image (.gif)", "gif", "gif"
+    elif sig_type == "evtx":
+        return "Windows Event Log (.evtx)", "evtx", "evtx"
+    elif sig_type == "regf":
+        return "Windows Registry Hive (.regf)", "regf", "regf"
+
+    return "Binary Artifact", sig_type, "bin"
 
 
 class FileCarver:
@@ -152,7 +225,6 @@ class FileCarver:
         carved_records = []
         carved_count = 0
         global_offset = 0
-        overlap_size = 1024 * 1024  # 1MB overlap across chunk boundaries
         buffer = b""
 
         print(f"[*] Starting signature-based file carving on {source_name}...")
@@ -164,18 +236,19 @@ class FileCarver:
 
             to_read = self.chunk_size
             if max_scan_bytes:
-                to_read = min(to_read, max_scan_bytes - global_offset)
+                to_read = min(to_read, max_scan_bytes - (global_offset + len(buffer)))
 
-            chunk = stream_reader.read(to_read)
-            if not chunk:
+            chunk = stream_reader.read(to_read) if to_read > 0 else b""
+            if not chunk and not buffer:
                 break
 
             buffer += chunk
             buf_len = len(buffer)
+            is_eof = (len(chunk) == 0)
 
             # Search signatures in the current buffer
             i = 0
-            while i < buf_len - 16:
+            while i <= buf_len - 16:
                 # Align to sector boundaries for disk images
                 matched_sig = None
                 for sig in SIGNATURES:
@@ -187,8 +260,8 @@ class FileCarver:
 
                 if matched_sig:
                     sig_type = matched_sig["type"]
-                    ext = matched_sig["ext"]
                     max_sz = matched_sig["max_size"]
+                    min_sz = matched_sig.get("min_size", 0)
                     footer = matched_sig["footer"]
                     file_start_offset = global_offset + i
 
@@ -196,51 +269,68 @@ class FileCarver:
                     carved_len = 0
 
                     if footer:
-                        # Search for footer within max_size
                         search_limit = min(buf_len, i + max_sz)
-                        footer_idx = buffer.find(footer, i + len(matched_sig["header"]), search_limit)
                         
+                        if sig_type == "pdf":
+                            # Use rfind to capture the latest %%EOF in the bounded window
+                            footer_idx = buffer.rfind(footer, i + len(matched_sig["header"]), search_limit)
+                        else:
+                            footer_idx = buffer.find(footer, i + len(matched_sig["header"]), search_limit)
+
                         if footer_idx != -1:
                             if sig_type == "zip":
                                 # ZIP End of Central Directory record is at least 22 bytes
                                 end_idx = min(buf_len, footer_idx + len(footer) + 20)
+                            elif sig_type == "pdf":
+                                # Include trailing newlines / EOF characters
+                                end_idx = min(buf_len, footer_idx + len(footer) + 8)
+                            elif sig_type == "rtf":
+                                end_idx = footer_idx + len(footer)
                             else:
                                 end_idx = footer_idx + len(footer)
                             carved_data = buffer[i:end_idx]
                             carved_len = len(carved_data)
                         else:
-                            # If footer not yet found in current buffer and buffer can be expanded, wait
-                            if len(chunk) == to_read and (buf_len - i) < max_sz:
-                                # We will retain from i onward and read more next iteration
+                            # If footer not yet found in current buffer and more stream data is available
+                            if not is_eof and (buf_len - i) < max_sz:
+                                # Retain buffer from i onward to read next chunk
                                 break
                             else:
-                                # Truncated or upper-bound carve
+                                # Truncated or upper-bound carve at EOF or max_sz
                                 carved_len = min(buf_len - i, max_sz)
                                 carved_data = buffer[i:i + carved_len]
                     elif sig_type == "sqlite":
-                        # Determine SQLite database size from page size and page count in header
                         if len(buffer) >= i + 32:
                             page_size = int.from_bytes(buffer[i+16:i+18], byteorder="big")
                             if page_size == 1:
                                 page_size = 65536
                             db_size_pages = int.from_bytes(buffer[i+28:i+32], byteorder="big")
                             expected_size = page_size * db_size_pages if db_size_pages > 0 else 0
-                            if 512 <= expected_size <= max_sz and (i + expected_size <= buf_len):
-                                carved_len = expected_size
-                                carved_data = buffer[i:i + carved_len]
+                            if 512 <= expected_size <= max_sz:
+                                if i + expected_size <= buf_len:
+                                    carved_len = expected_size
+                                    carved_data = buffer[i:i + carved_len]
+                                elif not is_eof:
+                                    break
+                                else:
+                                    carved_len = min(buf_len - i, max_sz)
+                                    carved_data = buffer[i:i + carved_len]
                             else:
-                                # Standard chunk
                                 carved_len = min(buf_len - i, 16 * 1024 * 1024)
                                 carved_data = buffer[i:i + carved_len]
                         else:
                             carved_len = min(buf_len - i, max_sz)
                             carved_data = buffer[i:i + carved_len]
                     else:
-                        # Fixed chunk or sector scan
+                        # Fixed chunk / header-only signature (e.g. 7z, OLE, evtx, regf)
                         carved_len = min(buf_len - i, max_sz)
                         carved_data = buffer[i:i + carved_len]
 
-                    if carved_len > 0 and len(carved_data) > 0:
+                    # Filter out tiny noise / sub-min_size files
+                    if carved_len >= min_sz and len(carved_data) >= min_sz:
+                        # Deep classify payload type (detect docx, xlsx, pptx, doc, xls, ppt, etc.)
+                        disp_name, type_code, ext = classify_carved_payload(sig_type, carved_data)
+
                         carved_count += 1
                         artifact_id = f"CARVE_{carved_count:05d}"
                         out_filename = f"{artifact_id}.{ext}"
@@ -254,32 +344,34 @@ class FileCarver:
                         record = {
                             "artifact_id": artifact_id,
                             "filename": out_filename,
-                            "file_type": matched_sig["name"],
-                            "type_code": sig_type,
+                            "file_type": disp_name,
+                            "type_code": type_code,
                             "extension": ext,
                             "source_offset": file_start_offset,
                             "size_bytes": carved_len,
                             "sha256": sha256_hash,
-                            "recovery_method": "Signature Carving (Header/Footer)",
+                            "recovery_method": f"Signature Carving ({disp_name})",
                             "confidence": "HIGH" if footer and footer_idx != -1 else "MEDIUM",
                             "source": source_name
                         }
                         carved_records.append(record)
-                        print(f"  [+] Carved {out_filename} ({matched_sig['name']}) at offset {file_start_offset} ({carved_len} bytes) - SHA256: {sha256_hash[:16]}...")
+                        print(f"  [+] Carved {out_filename} ({disp_name}) at offset {file_start_offset} ({carved_len} bytes) - SHA256: {sha256_hash[:16]}...")
                         
                         i += max(self.sector_size, carved_len)
                         continue
 
                 i += self.sector_size
 
-            # Retain overlap at end of buffer
-            keep_bytes = min(overlap_size, buf_len - i) if i < buf_len else 0
-            if keep_bytes > 0:
-                buffer = buffer[-keep_bytes:]
-                global_offset += (buf_len - keep_bytes)
+            # Retain unprocessed portion of buffer from index i onward
+            if i < buf_len and not is_eof:
+                buffer = buffer[i:]
+                global_offset += i
             else:
                 buffer = b""
                 global_offset += buf_len
+
+            if is_eof:
+                break
 
         # Write manifest
         manifest_path = output_dir / "carving_manifest.json"

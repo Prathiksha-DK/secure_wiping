@@ -1,0 +1,8 @@
+{
+  "status": "N/A",
+  "evidence_type": "Disk Image / Storage Volume",
+  "notes": "N/A \u2014 No volatile memory evidence supplied (disk storage evidence).",
+  "processes_recovered": 0,
+  "network_artifacts_recovered": 0,
+  "artifacts": []
+}

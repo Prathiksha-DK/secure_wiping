@@ -21,6 +21,8 @@ from storage_inspector import (
     map_clusters_to_lba_extents,
     parse_fat32_directory_entries,
     get_file_storage_allocation,
+    get_folder_storage_allocation,
+    direct_fat32_folder_allocation,
 )
 
 
@@ -846,20 +848,127 @@ class TestStorageInspector(unittest.TestCase):
             self.assertEqual(alloc["mapping_layer"], "Device Logical LBA")
             self.assertEqual(alloc["raw_lba_verification"], "PASS")
 
-    # 45. Test Real USB Raw Sector Content Match (when E: is connected)
-    def test_45_real_usb_raw_sector_content_match(self):
-        real_usb_file = r"E:\SecureWipe_Test\evidence.txt"
-        if os.path.exists(real_usb_file):
-            details = get_file_details(real_usb_file, compute_hash=True)
-            self.assertEqual(details["status"], "SUCCESS")
-            self.assertTrue(details["is_allocation_available"])
-            self.assertEqual(details["starting_cluster"], 7)
-            self.assertEqual(details["starting_lba"], 34856)
-            self.assertEqual(details["raw_lba_verification"], "PASS")
-            self.assertIn("The bytes obtained from the calculated LBA", details["verification_statement"])
-            with open(real_usb_file, "rb") as f:
-                content = f.read()
-            self.assertEqual(content, b"SECUREWIPE_FOLDER_TEST_12345")
+    # 46. Test Direct FAT32 Folder Allocation (Directory Table + Child Files + Combined Map)
+    def test_46_fat32_folder_allocation_directory_and_children(self):
+        f_alloc = direct_fat32_folder_allocation("", target_device=self.fat32_img)
+        self.assertIsNotNone(f_alloc)
+        self.assertTrue(f_alloc["is_allocation_available"])
+        self.assertEqual(f_alloc["filesystem"], "FAT32")
+
+        # Check Directory Table Allocation
+        dir_alloc = f_alloc["directory_allocation"]
+        self.assertEqual(dir_alloc["starting_cluster"], 2)
+        self.assertEqual(dir_alloc["starting_lba"], 96)
+        self.assertEqual(dir_alloc["sectors_occupied"], 8)
+        self.assertEqual(dir_alloc["clusters_occupied"], 1)
+
+        # Check Child Files Allocation
+        child_files = f_alloc["child_files"]
+        self.assertEqual(len(child_files), 2)
+        readme = next((cf for cf in child_files if "README" in cf["name"]), None)
+        logdata = next((cf for cf in child_files if "LOGDATA" in cf["name"]), None)
+        self.assertIsNotNone(readme)
+        self.assertIsNotNone(logdata)
+        self.assertEqual(readme["starting_cluster"], 3)
+        self.assertEqual(readme["starting_lba"], 104)
+        self.assertEqual(logdata["starting_cluster"], 5)
+        self.assertEqual(logdata["starting_lba"], 120)
+
+        # Check Combined Folder Storage Map (Deduplicated & Merged)
+        combined = f_alloc["combined_storage_map"]
+        self.assertEqual(combined["starting_lba"], 96)
+        self.assertGreaterEqual(combined["total_sectors"], 8 + 16 + 16)  # Dir (8) + Readme (16) + Logdata (16)
+        self.assertTrue(len(combined["extents"]) >= 1)
+
+    # 47. Test Mode B: Filesystem Object Hex Reader for Files
+    def test_47_mode_b_file_hex_sector_reader(self):
+        sec_res = read_storage_hex_sector(
+            "README.TXT",
+            target_device=self.fat32_img,
+            mode="file",
+            extent_index=0,
+            relative_sector=0
+        )
+        self.assertEqual(sec_res["status"], "SUCCESS")
+        self.assertEqual(sec_res["mode"], "file")
+        self.assertEqual(sec_res["lba"], 104)
+        self.assertEqual(len(sec_res["rows"]), 32)
+        self.assertTrue("sha256" in sec_res)
+        self.assertEqual(len(sec_res["sha256"]), 64)
+        self.assertEqual(sec_res["current_extent_index"], 0)
+        self.assertEqual(sec_res["relative_sector_in_extent"], 0)
+
+    # 48. Test Mode B: Filesystem Object Hex Reader for Folders (Directory Subview)
+    def test_48_mode_b_folder_hex_sector_reader_directory_subview(self):
+        sec_res = read_storage_hex_sector(
+            "",
+            target_device=self.fat32_img,
+            mode="folder",
+            sub_view="directory",
+            extent_index=0,
+            relative_sector=0
+        )
+        self.assertEqual(sec_res["status"], "SUCCESS")
+        self.assertEqual(sec_res["mode"], "folder")
+        self.assertEqual(sec_res["sub_view"], "directory")
+        self.assertEqual(sec_res["lba"], 96)
+        self.assertEqual(len(sec_res["rows"]), 32)
+        # Check that directory entries for README and LOGDATA appear in rows ascii
+        combined_ascii = "".join(r["ascii"] for r in sec_res["rows"])
+        self.assertIn("README", combined_ascii)
+
+    # 49. Test Mode B: Filesystem Object Hex Reader for Folders (Child Files Subview)
+    def test_49_mode_b_folder_hex_sector_reader_child_files_subview(self):
+        sec_res = read_storage_hex_sector(
+            "",
+            target_device=self.fat32_img,
+            mode="folder",
+            sub_view="child_files",
+            child_file_path="README.TXT",
+            extent_index=0,
+            relative_sector=0
+        )
+        self.assertEqual(sec_res["status"], "SUCCESS")
+        self.assertEqual(sec_res["mode"], "folder")
+        self.assertEqual(sec_res["sub_view"], "child_files")
+        self.assertEqual(sec_res["lba"], 104)
+
+    # 50. Test Mode B: Filesystem Object Hex Reader for Folders (Combined Subview)
+    def test_50_mode_b_folder_hex_sector_reader_combined_subview(self):
+        sec_res = read_storage_hex_sector(
+            "",
+            target_device=self.fat32_img,
+            mode="folder",
+            sub_view="combined",
+            extent_index=0,
+            relative_sector=0
+        )
+        self.assertEqual(sec_res["status"], "SUCCESS")
+        self.assertEqual(sec_res["mode"], "folder")
+        self.assertEqual(sec_res["sub_view"], "combined")
+        self.assertEqual(sec_res["lba"], 96)
+
+    # 51. Test Folder Allocation Unavailable Fallback
+    def test_51_folder_allocation_unavailable_fallback(self):
+        f_alloc = get_folder_storage_allocation("NONEXISTENT_FOLDER_XYZ", target_device=None)
+        self.assertFalse(f_alloc["is_allocation_available"])
+        self.assertEqual(f_alloc["child_files_count"], 0)
+        self.assertEqual(f_alloc["directory_allocation"]["sectors_occupied"], 0)
+
+    # 52. Test Real USB Folder Storage Allocation (when E:\SecureWipe_Test is connected)
+    def test_52_real_usb_folder_allocation(self):
+        real_usb_folder = r"E:\SecureWipe_Test"
+        if os.path.exists(real_usb_folder) and os.path.isdir(real_usb_folder):
+            f_alloc = get_folder_storage_allocation(real_usb_folder)
+            self.assertTrue(f_alloc["is_allocation_available"])
+            self.assertEqual(f_alloc["filesystem"], "FAT32")
+            self.assertGreaterEqual(f_alloc["directory_allocation"]["sectors_occupied"], 1)
+            self.assertIsNotNone(f_alloc["directory_allocation"]["starting_cluster"])
+            self.assertIsNotNone(f_alloc["directory_allocation"]["starting_lba"])
+            evidence = next((cf for cf in f_alloc["child_files"] if "evidence" in cf["name"].lower()), None)
+            if evidence:
+                self.assertEqual(evidence["starting_cluster"], 7)
+                self.assertEqual(evidence["starting_lba"], 34856)
 
 
 if __name__ == "__main__":

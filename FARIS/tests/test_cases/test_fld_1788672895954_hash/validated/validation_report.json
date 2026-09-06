@@ -1,0 +1,36 @@
+{
+  "case_id": "test_fld_1788672895954_hash",
+  "scope": "FOLDER",
+  "folder_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpwpvyns2a\\HashTest",
+  "total_items": 1,
+  "valid_items": 1,
+  "pass1_fs_items": 1,
+  "pass2_carved_items": 0,
+  "validation_timestamp": "2026-09-06T05:34:56.005707+00:00",
+  "items": [
+    {
+      "name": "sample.bin",
+      "relative_path": "sample.bin",
+      "destination_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmp_iwr104z\\test_fld_1788672895954_hash\\recovery\\folder\\HashTest\\sample.bin",
+      "status": "RECOVERED",
+      "state": "ACTIVE",
+      "size_bytes": 43,
+      "sha256": "1f03bda5c3cd6994558c4338f632b29ceab69ff2b636978a7bd58fe7cb18d415",
+      "starting_cluster": null,
+      "cluster_chain": "OS Managed",
+      "starting_lba": null,
+      "ending_lba": null,
+      "allocated_sectors": 1,
+      "allocated_clusters": 1,
+      "extents": [],
+      "integrity_verified": true,
+      "validation": "RECOVERED (43 Bytes Extracted)",
+      "confidence": "MEDIUM",
+      "recovery_source": "Pass 1A (Active Filesystem)",
+      "recovery_method": "Active Filesystem Allocation",
+      "directory_cluster": null,
+      "directory_entry_lba": null,
+      "directory_entry_byte_offset_hex": null
+    }
+  ]
+}

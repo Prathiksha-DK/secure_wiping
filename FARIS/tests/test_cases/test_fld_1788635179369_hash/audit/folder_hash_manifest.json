@@ -1,0 +1,13 @@
+{
+  "case_id": "test_fld_1788635179369_hash",
+  "scope": "FOLDER",
+  "generated_at": "2026-09-05T19:06:19.424964+00:00",
+  "manifest_entries": [
+    {
+      "item": "sample.bin",
+      "size_bytes": 43,
+      "sha256": "1f03bda5c3cd6994558c4338f632b29ceab69ff2b636978a7bd58fe7cb18d415",
+      "source": "Pass 1A (Active Filesystem)"
+    }
+  ]
+}

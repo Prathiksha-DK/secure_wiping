@@ -1,0 +1,10 @@
+{
+  "case_id": "test_pipe_1788632505",
+  "source_image": "test_svc_evidence.raw",
+  "partition_offset": 0,
+  "total_artifacts": 0,
+  "active_artifacts": 0,
+  "deleted_artifacts": 0,
+  "categories": {},
+  "artifacts": []
+}

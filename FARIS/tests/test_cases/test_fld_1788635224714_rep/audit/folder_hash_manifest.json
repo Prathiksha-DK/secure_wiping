@@ -1,0 +1,13 @@
+{
+  "case_id": "test_fld_1788635224714_rep",
+  "scope": "FOLDER",
+  "generated_at": "2026-09-05T19:07:04.773419+00:00",
+  "manifest_entries": [
+    {
+      "item": "data.csv",
+      "size_bytes": 20,
+      "sha256": "e05776ee7b66bd95e116682dba8be14337fc3f40ebea15028d72b275aee795d9",
+      "source": "Pass 1A (Active Filesystem)"
+    }
+  ]
+}

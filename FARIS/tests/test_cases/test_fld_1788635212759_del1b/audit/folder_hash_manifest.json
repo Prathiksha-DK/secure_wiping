@@ -1,0 +1,13 @@
+{
+  "case_id": "test_fld_1788635212759_del1b",
+  "scope": "FOLDER",
+  "generated_at": "2026-09-05T19:06:52.826913+00:00",
+  "manifest_entries": [
+    {
+      "item": "active1.txt",
+      "size_bytes": 21,
+      "sha256": "67669ba92c41ba71c10da616d8ec72c675938b6cc47824642152fbb054794d25",
+      "source": "Pass 1A (Active Filesystem)"
+    }
+  ]
+}

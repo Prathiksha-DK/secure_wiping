@@ -23,13 +23,19 @@ from typing import Dict, Any, Optional
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-# Add FARIS root and application directories to sys.path
+# Add FARIS root, application, and backend directories to sys.path
 CURRENT_DIR = Path(__file__).resolve().parent
 FARIS_ROOT = CURRENT_DIR.parent
+PROJECT_ROOT = FARIS_ROOT.parent
+BACKEND_DIR = PROJECT_ROOT / "backend"
 if str(FARIS_ROOT) not in sys.path:
     sys.path.insert(0, str(FARIS_ROOT))
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     from application.faris_api import faris_api
@@ -485,6 +491,138 @@ def get_audit_trail(case_id: str):
         return jsonify({"status": "SUCCESS", "case_id": case_id, "entries": entries}), 200
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Folder-Level Forensic Recovery Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/faris/folder/resolve-scope")
+def resolve_folder_scope_endpoint():
+    """
+    Resolves storage allocation, directory cluster chain, child items, and logical LBAs for a folder.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        folder_path = str(body.get("folder_path") or body.get("path") or "").strip()
+        target_device = body.get("target_device") or body.get("target")
+
+        if not folder_path:
+            return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+
+        scope_result = faris_api.resolve_folder_scope(folder_path, target_device=target_device)
+        return jsonify(scope_result), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+@app.post("/api/faris/folder/recover")
+def start_folder_recovery_endpoint():
+    """
+    Launches asynchronous background Folder Recovery Pipeline via FARISAPI.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        case_id = str(body.get("case_id") or "").strip()
+        if not case_id:
+            case_id = f"FARIS-FLD-{uuid.uuid4().hex[:8].upper()}"
+            body["case_id"] = case_id
+
+        folder_path = str(body.get("folder_path") or body.get("target_path") or "").strip()
+        if not folder_path:
+            return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+
+        job_id = f"JOB-FLD-{uuid.uuid4().hex[:8].upper()}"
+
+        job_entry = {
+            "job_id": job_id,
+            "case_id": case_id,
+            "scope": "FOLDER",
+            "folder_path": folder_path,
+            "status": "RUNNING",
+            "progress_pct": 0.0,
+            "current_stage": "setup",
+            "stage_status": "RUNNING",
+            "logs": [],
+            "stages": {
+                "setup": {"label": "Workspace Initialization", "status": "PENDING", "pct": 5.0},
+                "scope_resolution": {"label": "Scope & Allocation Mapping", "status": "PENDING", "pct": 15.0},
+                "fs_recovery": {"label": "Pass 1: Filesystem Structure Extraction", "status": "PENDING", "pct": 30.0},
+                "carving": {"label": "Pass 2: Scoped Forensic Carving", "status": "PENDING", "pct": 60.0},
+                "validation": {"label": "Integrity & Confidence Validation", "status": "PENDING", "pct": 80.0},
+                "hashing": {"label": "SHA-256 Manifest Hashing", "status": "PENDING", "pct": 88.0},
+                "reporting": {"label": "Multi-Format Forensic Reporting", "status": "PENDING", "pct": 95.0},
+            },
+            "result": None,
+            "error": None,
+            "start_time": time.time(),
+            "end_time": None,
+        }
+
+        with _jobs_lock:
+            _jobs[job_id] = job_entry
+
+        def _folder_progress_cb(stage_id: str, status: str, pct: float, msg: str):
+            with _jobs_lock:
+                if job_id in _jobs:
+                    j = _jobs[job_id]
+                    j["progress_pct"] = float(pct)
+                    j["current_stage"] = stage_id
+                    j["stage_status"] = status
+                    log_entry = {
+                        "timestamp": time.strftime("%H:%M:%S", time.localtime()),
+                        "stage": stage_id,
+                        "status": status,
+                        "pct": pct,
+                        "message": msg
+                    }
+                    j["logs"].append(log_entry)
+                    if stage_id in j["stages"]:
+                        j["stages"][stage_id]["status"] = status
+                        j["stages"][stage_id]["pct"] = pct
+
+        def _folder_worker():
+            try:
+                result = faris_api.recover_folder(body, progress_callback=_folder_progress_cb)
+                with _jobs_lock:
+                    if job_id in _jobs:
+                        j = _jobs[job_id]
+                        j["status"] = result.get("status", "SUCCESS")
+                        j["result"] = result
+                        j["end_time"] = time.time()
+                        if result.get("status") == "FAILED":
+                            j["error"] = result.get("error", "Folder recovery pipeline failed.")
+            except Exception as e:
+                with _jobs_lock:
+                    if job_id in _jobs:
+                        j = _jobs[job_id]
+                        j["status"] = "FAILED"
+                        j["error"] = str(e)
+                        j["end_time"] = time.time()
+
+        thread = threading.Thread(target=_folder_worker, daemon=True)
+        thread.start()
+
+        return jsonify({
+            "status": "SUCCESS",
+            "job_id": job_id,
+            "case_id": case_id,
+            "scope": "FOLDER",
+            "message": "FARIS folder recovery pipeline started"
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+@app.get("/api/faris/folder/jobs/<job_id>")
+def get_folder_job_status(job_id: str):
+    """Retrieves live telemetry and execution state for a folder recovery job."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return jsonify({"status": "ERROR", "message": f"Job ID '{job_id}' not found"}), 404
+        return jsonify(job), 200
 
 
 # ---------------------------------------------------------------------------

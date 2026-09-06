@@ -1,11 +1,11 @@
 {
   "case_id": "test_unified_export_case",
   "stage": "PRE_ANALYSIS",
-  "timestamp": "2026-09-04T07:54:36.936837+00:00",
+  "timestamp": "2026-09-05T18:45:20.855841+00:00",
   "evidence_count": 1,
   "results": [
     {
-      "timestamp": "2026-09-04T07:54:36.935790+00:00",
+      "timestamp": "2026-09-05T18:45:20.854840+00:00",
       "target": "tests/test_cases/test_unified_export_case/evidence/test_evidence.raw",
       "image_format": "E01 (Expert Witness)",
       "stored_md5": "",

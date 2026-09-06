@@ -1,0 +1,3 @@
+File Name,Relative Path,Validation Status,Confidence,Size (Bytes),SHA-256 Hash,Forensic Reason
+RECON_RESIDUAL_0001_2048.png,tests/test_cases/test_pipe_1788633289/recovery/sanitization/reconstructed/RECON_RESIDUAL_0001_2048.png,VALID,HIGH,45,d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f,PNG magic header and IEND chunk verified.
+RESIDUAL_0001_2048.png,tests/test_cases/test_pipe_1788633289/recovery/sanitization/residuals/RESIDUAL_0001_2048.png,VALID,HIGH,45,d6ebecff77ea12863d78873f10a657f46eed069f90fe5c4edf7341b5cbba4a7f,PNG magic header and IEND chunk verified.

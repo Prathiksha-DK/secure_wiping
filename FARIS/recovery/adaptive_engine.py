@@ -87,14 +87,55 @@ class AdaptiveRecoveryEngine:
         print("========================================================")
 
         # ----------------------------------------------------
-        # 1. Metadata Recovery (Dynamic across all discovered artifacts)
+        # 1. Metadata & Filesystem Hierarchy Recovery (TSK tsk_recover + icat)
         # ----------------------------------------------------
-        print("\n[Branch 1/10] Metadata Recovery...")
-        emit_branch(1, "Metadata Recovery", "RUNNING", 75.0, "Extracting inode metadata & content streams via icat...")
+        print("\n[Branch 1/10] Metadata & Filesystem Hierarchy Recovery...")
+        emit_branch(1, "Metadata & Filesystem Recovery", "RUNNING", 75.0, "Extracting filesystem directory hierarchy and inode streams...")
         metadata_out = recovery_dir / "metadata"
         metadata_out.mkdir(parents=True, exist_ok=True)
+        tree_out = recovery_dir / "filesystem_tree"
+        tree_out.mkdir(parents=True, exist_ok=True)
 
-        # Process ALL discovered artifacts without artificial limits
+        recovered_hashes: Set[str] = set()
+        validated_metadata_records = []
+        metadata_success_count = 0
+        fallback_candidates = []
+
+        # Pass 1A: Reconstruct complete hierarchical filesystem directory tree via TSK tsk_recover
+        try:
+            tree_res = metadata_recovery_engine.extract_filesystem_tree(
+                case_id=case_id,
+                image_path=image_path,
+                partition_offset=partition_offset,
+                output_dir=tree_out
+            )
+            for tree_art in tree_res.get("artifacts", []):
+                t_rel = tree_art.get("output_file", "")
+                t_path = Path(t_rel) if Path(t_rel).is_absolute() else (FARIS_ROOT / t_rel)
+                if t_path.exists() and t_path.is_file():
+                    val_res = recovery_validator.validate_file(t_path)
+                    t_sha = val_res.get("sha256", "")
+                    if val_res.get("validation_status") in ("VALID", "PARTIALLY_VALID", "UNVERIFIED_GENERIC") and t_path.stat().st_size > 0:
+                        metadata_success_count += 1
+                        if t_sha:
+                            recovered_hashes.add(t_sha)
+                        classification = "FULLY_RECOVERED" if val_res.get("validation_status") == "VALID" else "PARTIALLY_RECOVERED"
+                        pipeline_results["master_provenance"].append({
+                            "artifact_id": f"FS_{tree_art.get('filename')}",
+                            "name": tree_art.get("filename"),
+                            "relative_path": tree_art.get("relative_path"),
+                            "recovery_method": "filesystem_tree/tsk_recover",
+                            "file_path": get_relative_str(t_path),
+                            "size_bytes": t_path.stat().st_size,
+                            "sha256": t_sha,
+                            "classification": classification,
+                            "confidence": val_res.get("confidence", "HIGH"),
+                            "notes": f"Reconstructed in directory structure: {tree_art.get('relative_path')}. {val_res.get('reason', '')}"
+                        })
+        except Exception as e:
+            print(f"[!] Filesystem tree recovery notice: {e}")
+
+        # Pass 1B: Process ALL individual discovered inodes via icat
         raw_meta_results = metadata_recovery_engine.recover_all_discovered_artifacts(
             case_id=case_id,
             image_path=image_path,
@@ -103,12 +144,6 @@ class AdaptiveRecoveryEngine:
             output_dir=metadata_out,
             max_artifacts=None
         )
-
-        # Validate every metadata recovery result
-        validated_metadata_records = []
-        metadata_success_count = 0
-        fallback_candidates = []
-        recovered_hashes: Set[str] = set()
 
         for rec in raw_meta_results:
             out_file_str = rec.get("output_file", "")
@@ -124,23 +159,106 @@ class AdaptiveRecoveryEngine:
             validated_metadata_records.append(rec)
 
             if rec["validation_status"] in ("VALID", "PARTIALLY_VALID", "UNVERIFIED_GENERIC") and rec.get("size_bytes", 0) > 0:
-                metadata_success_count += 1
-                if rec["sha256"]:
-                    recovered_hashes.add(rec["sha256"])
-                classification = "FULLY_RECOVERED" if rec["validation_status"] == "VALID" else ("PARTIALLY_RECOVERED" if rec["validation_status"] == "PARTIALLY_VALID" else "UNVERIFIED")
-                pipeline_results["master_provenance"].append({
-                    "artifact_id": rec.get("artifact_id"),
-                    "name": rec.get("artifact_name"),
-                    "recovery_method": "metadata/icat",
-                    "file_path": rec.get("output_file"),
-                    "size_bytes": rec.get("size_bytes"),
-                    "sha256": rec["sha256"],
-                    "classification": classification,
-                    "confidence": rec["confidence"],
-                    "notes": val_res.get("reason", "")
-                })
+                rec_sha = rec["sha256"]
+                if rec_sha not in recovered_hashes:
+                    metadata_success_count += 1
+                    if rec_sha:
+                        recovered_hashes.add(rec_sha)
+                    classification = "FULLY_RECOVERED" if rec["validation_status"] == "VALID" else ("PARTIALLY_RECOVERED" if rec["validation_status"] == "PARTIALLY_VALID" else "UNVERIFIED")
+                    pipeline_results["master_provenance"].append({
+                        "artifact_id": rec.get("artifact_id"),
+                        "name": rec.get("artifact_name"),
+                        "relative_path": rec.get("relative_path"),
+                        "recovery_method": "metadata/icat",
+                        "file_path": rec.get("output_file"),
+                        "size_bytes": rec.get("size_bytes"),
+                        "sha256": rec_sha,
+                        "classification": classification,
+                        "confidence": rec["confidence"],
+                        "notes": val_res.get("reason", "")
+                    })
             else:
                 fallback_candidates.append(rec)
+
+        # Pass 1C: FAT32 Deleted Files Raw Cluster Recovery (for zeroed FAT deleted inodes)
+        try:
+            from .fat32_deleted_recovery import parse_fat32_bpb_from_boot, FAT32RawScanner
+        except ImportError:
+            try:
+                from recovery.fat32_deleted_recovery import parse_fat32_bpb_from_boot, FAT32RawScanner
+            except ImportError:
+                parse_fat32_bpb_from_boot = None
+                FAT32RawScanner = None
+
+        if FAT32RawScanner and parse_fat32_bpb_from_boot and image_path.exists():
+            try:
+                img_cat = engine_manager.get_tool_path("img_cat")
+                
+                def _read_sector_fn(part_lba: int, sec_count: int) -> bytes:
+                    abs_sec = partition_offset + part_lba
+                    if img_cat and img_cat.exists():
+                        # Sleuth Kit img_cat read
+                        try:
+                            cmd_rd = [str(img_cat), "-s", str(abs_sec), "-b", "512", str(image_path), str(sec_count)]
+                            p_rd = subprocess.run(cmd_rd, capture_output=True, timeout=10)
+                            if p_rd.returncode == 0 and p_rd.stdout:
+                                return p_rd.stdout
+                        except Exception:
+                            pass
+                    # Fallback raw file read
+                    try:
+                        with open(image_path, "rb") as f_img:
+                            f_img.seek(abs_sec * 512)
+                            return f_img.read(sec_count * 512)
+                    except Exception:
+                        return b""
+
+                boot_sec = _read_sector_fn(0, 1)
+                bpb = parse_fat32_bpb_from_boot(boot_sec)
+                if bpb:
+                    fat_scanner = FAT32RawScanner(_read_sector_fn, bpb, part_start_lba=partition_offset, device_path=image_path.name)
+                    # Scan root and directory clusters
+                    dir_clusters_to_scan = [bpb["root_cluster"]]
+                    for a in disc_arts:
+                        if a.get("is_directory"):
+                            try:
+                                inum = int(str(a.get("inode", "")).split("-")[0])
+                                if inum >= 2 and inum not in dir_clusters_to_scan:
+                                    dir_clusters_to_scan.append(inum)
+                            except Exception:
+                                pass
+
+                    deleted_recovered_dir = recovery_dir / "deleted_files"
+                    deleted_recovered_dir.mkdir(parents=True, exist_ok=True)
+
+                    for d_clus in dir_clusters_to_scan:
+                        _, del_entries = fat_scanner.scan_directory_cluster(d_clus)
+                        for d_entry in del_entries:
+                            if d_entry.get("starting_cluster"):
+                                rec_d = fat_scanner.recover_deleted_file_data(d_entry)
+                                if rec_d.get("status") == "RECOVERED" and rec_d.get("bytes"):
+                                    d_name = d_entry.get("name", "deleted_file")
+                                    d_sha = rec_d.get("sha256", "")
+                                    if d_sha and d_sha not in recovered_hashes:
+                                        recovered_hashes.add(d_sha)
+                                        out_f = deleted_recovered_dir / d_name
+                                        with open(out_f, "wb") as f_del:
+                                            f_del.write(rec_d["bytes"])
+                                        metadata_success_count += 1
+                                        pipeline_results["master_provenance"].append({
+                                            "artifact_id": f"DEL_{d_name}",
+                                            "name": d_name,
+                                            "relative_path": d_name,
+                                            "recovery_method": "fat32_deleted_scanner",
+                                            "file_path": get_relative_str(out_f),
+                                            "size_bytes": len(rec_d["bytes"]),
+                                            "sha256": d_sha,
+                                            "classification": "FULLY_RECOVERED",
+                                            "confidence": rec_d.get("confidence", "HIGH"),
+                                            "notes": f"Recovered deleted FAT32 entry from cluster {d_entry.get('starting_cluster')}. {rec_d.get('validation')}"
+                                        })
+            except Exception as e_fat:
+                print(f"[!] FAT32 deleted scanner notice: {e_fat}")
 
         pipeline_results["branches"]["metadata_recovery"] = {
             "status": "COMPLETED",
@@ -150,7 +268,7 @@ class AdaptiveRecoveryEngine:
             "output_dir": get_relative_str(metadata_out),
             "recovered_records": validated_metadata_records
         }
-        emit_branch(1, "Metadata Recovery", "COMPLETED", 76.0, f"{metadata_success_count} valid artifacts recovered from {len(validated_metadata_records)} discovered inodes.")
+        emit_branch(1, "Metadata Recovery", "COMPLETED", 76.0, f"{metadata_success_count} valid artifacts recovered into directory structures.")
 
         # ----------------------------------------------------
         # 2. File Carving (Signature-Based)

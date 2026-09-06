@@ -34,11 +34,34 @@ import {
   Info,
   Timer,
   Lock,
+  Layers,
+  Folder,
+  FileCode,
+  FileCheck,
+  ArrowRight,
+  ExternalLink,
 } from "lucide-react";
 import { isFarisLocked, setFarisLock, showNavigationLockedAlert } from "@/lib/faris-lock";
 import { cn } from "@/lib/utils";
 
-const FARIS_API = process.env.NEXT_PUBLIC_FARIS_API_URL || "http://localhost:8760";
+const FARIS_SERVERS = [
+  process.env.NEXT_PUBLIC_FARIS_API_URL || "http://localhost:8760",
+  "http://localhost:9758",
+];
+
+async function fetchFaris(path: string, options?: RequestInit): Promise<Response> {
+  const normPath = path.startsWith("/") ? path : `/${path}`;
+  let lastErr: any = null;
+  for (const base of FARIS_SERVERS) {
+    try {
+      const res = await fetch(`${base}${normPath}`, options);
+      return res;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("Cannot connect to FARIS service on port 8760 or 9758");
+}
 
 const RECOVERY_BRANCHES = [
   { id: 1, key: "recovery_branch_1", name: "Metadata Recovery" },
@@ -97,6 +120,19 @@ export default function FarisRecoveryPage() {
   const [loadingStatus, setLoadingStatus] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Recovery Scope Mode: "DEVICE" vs "FOLDER"
+  const [recoveryScope, setRecoveryScope] = useState<"DEVICE" | "FOLDER">("DEVICE");
+  const [folderPath, setFolderPath] = useState<string>("E:\\SecureWipe_Test");
+  const [folderScopeData, setFolderScopeData] = useState<any>(null);
+  const [isResolvingScope, setIsResolvingScope] = useState<boolean>(false);
+  const [folderMethods, setFolderMethods] = useState<string[]>([
+    "fs_hierarchy",
+    "scoped_carving",
+    "directory_slack",
+    "fragment_correlation",
+    "sha256_validation",
+  ]);
+
   // Mandatory Pre-Start Form Inputs (Physical Device Only)
   const [selectedDevice, setSelectedDevice] = useState<string>("");
   const [caseNumber, setCaseNumber] = useState<string>("");
@@ -128,8 +164,27 @@ export default function FarisRecoveryPage() {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Load Engines & Discovered Devices on Mount
+  // Read URL query params on mount for pre-populating folder scope from Storage Inspector
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const scopeParam = params.get("scope");
+      const targetFolderParam = params.get("target_folder");
+      const targetDeviceParam = params.get("target_device");
+
+      if (scopeParam === "folder" || targetFolderParam) {
+        setRecoveryScope("FOLDER");
+        if (targetFolderParam) {
+          setFolderPath(targetFolderParam);
+          if (!caseNumber) {
+            const folderBase = targetFolderParam.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "FOLDER";
+            setCaseNumber(`FARIS-FLD-${folderBase.toUpperCase()}`);
+            setEvidenceNumber(`EVID-${folderBase.toUpperCase()}`);
+          }
+          handleResolveScope(targetFolderParam, targetDeviceParam || "");
+        }
+      }
+    }
     refreshEnvironment();
   }, []);
 
@@ -138,16 +193,16 @@ export default function FarisRecoveryPage() {
     setErrorMsg(null);
     try {
       // 1. Engine Inventory Status
-      const engRes = await fetch(`${FARIS_API}/api/faris/engine-status`);
+      const engRes = await fetchFaris("/api/faris/engine-status");
       if (engRes.ok) {
         const engData = await engRes.json();
         setEngineStatus(engData);
       } else {
-        setErrorMsg(`FARIS Service not responding on ${FARIS_API}. Ensure port 8760 is running.`);
+        setErrorMsg(`FARIS Service not responding. Ensure FARIS backend is active.`);
       }
 
       // 2. Discovered Physical Storage Media
-      const devRes = await fetch(`${FARIS_API}/api/faris/devices`);
+      const devRes = await fetchFaris("/api/faris/devices");
       if (devRes.ok) {
         const devData = await devRes.json();
         const physicalDevs = devData.physical_devices || [];
@@ -160,7 +215,7 @@ export default function FarisRecoveryPage() {
       }
 
       // 3. Existing Case Catalog
-      const casesRes = await fetch(`${FARIS_API}/api/faris/cases`);
+      const casesRes = await fetchFaris("/api/faris/cases");
       if (casesRes.ok) {
         const casesData = await casesRes.json();
         setCases(casesData.cases || []);
@@ -172,10 +227,43 @@ export default function FarisRecoveryPage() {
     }
   };
 
+  const handleResolveScope = async (pathOverride?: string, devOverride?: string) => {
+    const targetP = pathOverride || folderPath;
+    if (!targetP.trim()) {
+      setErrorMsg("Please enter a valid folder path to inspect.");
+      return;
+    }
+    setIsResolvingScope(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetchFaris("/api/faris/folder/resolve-scope", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folder_path: targetP.trim(),
+          target_device: devOverride || selectedDevice || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.status !== "ERROR") {
+        setFolderScopeData(data);
+        if (data.device_path && !selectedDevice) {
+          setSelectedDevice(data.device_path);
+        }
+      } else {
+        setErrorMsg(data.error || data.message || "Failed to resolve folder scope.");
+      }
+    } catch (e: any) {
+      setErrorMsg(`Error resolving folder scope: ${e.message}`);
+    } finally {
+      setIsResolvingScope(false);
+    }
+  };
+
   const loadCaseDetails = async (cId: string) => {
     if (!cId) return;
     try {
-      const res = await fetch(`${FARIS_API}/api/faris/cases/${cId}`);
+      const res = await fetchFaris(`/api/faris/cases/${cId}`);
       if (res.ok) {
         const data = await res.json();
         setCaseDetails(data.case);
@@ -185,7 +273,7 @@ export default function FarisRecoveryPage() {
     }
   };
 
-  // Real Timer Interval: Tracks actual elapsed duration
+  // Real Timer Interval
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isRunning && startTimeMs) {
@@ -198,7 +286,6 @@ export default function FarisRecoveryPage() {
     };
   }, [isRunning, startTimeMs]);
 
-  // Format Elapsed Seconds as HH:MM:SS
   const formatElapsed = (totalSecs: number): string => {
     const hrs = Math.floor(totalSecs / 3600);
     const mins = Math.floor((totalSecs % 3600) / 60);
@@ -209,202 +296,14 @@ export default function FarisRecoveryPage() {
   // Build structured Step Logs from real engine events
   const updateStepLogs = (rawLogs: LogEntry[], job: any) => {
     const steps: StepLogEntry[] = [];
-
-    // Track state of each recovery branch from real backend logs
-    const branchStates: Record<number, { status: string; text: string; timestamp: string }> = {};
-    RECOVERY_BRANCHES.forEach((b) => {
-      branchStates[b.id] = { status: "WAITING", text: "", timestamp: "" };
-    });
-
-    // Track state of each sanitization stage from real backend logs
-    const sanitizationStates: Record<string, { status: string; text: string; timestamp: string }> = {};
-    SANITIZATION_STAGES.forEach((s) => {
-      sanitizationStates[s.code] = { status: "WAITING", text: "", timestamp: "" };
-    });
-
     rawLogs.forEach((log) => {
-      if (log.stage && log.stage.startsWith("recovery_branch_")) {
-        const branchNum = parseInt(log.stage.replace("recovery_branch_", ""), 10);
-        if (branchNum >= 1 && branchNum <= 10) {
-          branchStates[branchNum] = {
-            status: log.status,
-            text: log.message,
-            timestamp: log.timestamp,
-          };
-        }
-      } else if (log.stage && log.stage.startsWith("sanitization_")) {
-        const stageCode = log.stage.replace("sanitization_", "").toUpperCase();
-        if (sanitizationStates[stageCode]) {
-          sanitizationStates[stageCode] = {
-            status: log.status,
-            text: log.message,
-            timestamp: log.timestamp,
-          };
-        }
-      }
-    });
-
-    // 1. Initial Device Selection & Setup
-    if (selectedDevice) {
       steps.push({
-        timestamp: rawLogs[0]?.timestamp || "00:00:00",
-        icon: "✓",
-        text: `Device selected: ${selectedDevice}`,
-        type: "info",
-      });
-    }
-
-    // 2. Iterate standard pipeline stages
-    rawLogs.forEach((log) => {
-      // Skip individual branch and sanitization sub-logs here as they are rendered in blocks
-      if (log.stage && (log.stage.startsWith("recovery_branch_") || log.stage.startsWith("sanitization_"))) {
-        return;
-      }
-
-      if (log.stage === "recovery") {
-        // Render 10-Branch Adaptive Engine Container and individual branches
-        steps.push({
-          timestamp: log.timestamp,
-          icon: log.status === "COMPLETED" ? "✓" : "▶",
-          text: log.message,
-          type: log.status === "COMPLETED" ? "success" : "start",
-        });
-
-        // Add each of the 10 branches in order
-        RECOVERY_BRANCHES.forEach((b) => {
-          const bs = branchStates[b.id];
-          let icon = "○";
-          let type: StepLogEntry["type"] = "branch";
-          let statusLabel = bs.status;
-
-          if (bs.status === "COMPLETED") {
-            icon = "✓";
-            type = "success";
-            statusLabel = "COMPLETED";
-          } else if (bs.status === "RUNNING") {
-            icon = "▶";
-            type = "start";
-            statusLabel = "RUNNING";
-          } else if (bs.status === "N/A") {
-            icon = "○";
-            type = "na";
-            statusLabel = "N/A";
-          } else if (bs.status === "FAILED") {
-            icon = "✗";
-            type = "fail";
-            statusLabel = "FAILED";
-          } else {
-            icon = "○";
-            type = "branch";
-            statusLabel = "WAITING";
-          }
-
-          const paddedNum = `${b.id}/10`.padEnd(5, " ");
-          const paddedName = b.name.padEnd(32, " ");
-          const branchText = `  ${icon} Step ${paddedNum} ${paddedName} ${statusLabel}`;
-
-          steps.push({
-            timestamp: bs.timestamp || log.timestamp,
-            icon,
-            text: branchText,
-            type,
-          });
-        });
-
-        // Render Specialized Sanitization Recovery Stages A through J
-        steps.push({
-          timestamp: log.timestamp,
-          icon: "▶",
-          text: "8. Specialized Sanitization Recovery Execution",
-          type: "start",
-        });
-
-        SANITIZATION_STAGES.forEach((s) => {
-          const ss = sanitizationStates[s.code];
-          let icon = "○";
-          let type: StepLogEntry["type"] = "branch";
-          let statusLabel = ss.status;
-
-          if (ss.status === "COMPLETED" || ss.status === "RESIDUAL_EVIDENCE_FOUND") {
-            icon = "✓";
-            type = "success";
-            statusLabel = ss.status;
-          } else if (ss.status === "RUNNING") {
-            icon = "▶";
-            type = "start";
-            statusLabel = "RUNNING";
-          } else if (ss.status === "N/A" || ss.status === "NOT_APPLICABLE" || ss.status === "NOT_ACCESSIBLE" || ss.status === "NO_RECOVERABLE_EVIDENCE") {
-            icon = "○";
-            type = "na";
-            statusLabel = ss.status;
-          } else if (ss.status === "FAILED") {
-            icon = "✗";
-            type = "fail";
-            statusLabel = "FAILED";
-          } else {
-            icon = "○";
-            type = "branch";
-            statusLabel = "WAITING";
-          }
-
-          const paddedCode = `${s.code}/10`.padEnd(5, " ");
-          const paddedName = s.name.padEnd(32, " ");
-          const stageText = `  ${icon} Stage ${paddedCode} ${paddedName} ${statusLabel}`;
-
-          steps.push({
-            timestamp: ss.timestamp || log.timestamp,
-            icon,
-            text: stageText,
-            type,
-          });
-        });
-
-        return;
-      }
-
-      let icon = "▶";
-      let type: StepLogEntry["type"] = "start";
-
-      if (log.status === "COMPLETED") {
-        icon = "✓";
-        type = "success";
-      } else if (log.status === "FAILED") {
-        icon = "✗";
-        type = "fail";
-      } else if (log.status === "N/A") {
-        icon = "○";
-        type = "na";
-      } else {
-        icon = "▶";
-        type = "start";
-      }
-
-      steps.push({
-        timestamp: log.timestamp,
-        icon,
+        timestamp: log.timestamp || "00:00:00",
+        icon: log.status === "COMPLETED" ? "✓" : log.status === "FAILED" ? "✗" : "▶",
         text: log.message,
-        type,
+        type: log.status === "COMPLETED" ? "success" : log.status === "FAILED" ? "fail" : "info",
       });
     });
-
-    if (job?.status === "SUCCESS") {
-      const lastTs = rawLogs[rawLogs.length - 1]?.timestamp || "";
-      steps.push({
-        timestamp: lastTs,
-        icon: "✓",
-        text: "FARIS Master Recovery Pipeline Completed Successfully",
-        type: "success",
-      });
-    } else if (job?.status === "FAILED") {
-      const lastTs = rawLogs[rawLogs.length - 1]?.timestamp || "";
-      steps.push({
-        timestamp: lastTs,
-        icon: "✗",
-        text: `Pipeline Execution Failed: ${job.error || "Unknown Error"}`,
-        type: "fail",
-      });
-    }
-
     setStepLogs(steps);
   };
 
@@ -423,13 +322,18 @@ export default function FarisRecoveryPage() {
     };
   }, [isRunning]);
 
-  // Pipeline Polling
+  // Unified Polling for both Device Pipeline and Folder Recovery jobs
   useEffect(() => {
     if (!activeJobId || !isRunning) return;
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${FARIS_API}/api/faris/pipeline/status/${activeJobId}`);
+        const isFld = activeJobId.startsWith("JOB-FLD-");
+        const statusUrl = isFld
+          ? `/api/faris/folder/jobs/${activeJobId}`
+          : `/api/faris/pipeline/status/${activeJobId}`;
+
+        const res = await fetchFaris(statusUrl);
         if (res.ok) {
           const job = await res.json();
           setPipelineState(job);
@@ -471,10 +375,10 @@ export default function FarisRecoveryPage() {
     }
   }, [stepLogs]);
 
+  // Start Device Pipeline
   const handleStartPipeline = async () => {
     setErrorMsg(null);
 
-    // Validate mandatory pre-start form fields
     if (!selectedDevice) {
       setErrorMsg("No physical target storage device selected. Please select a valid device.");
       return;
@@ -491,19 +395,13 @@ export default function FarisRecoveryPage() {
       setErrorMsg("Examiner Name is mandatory. Please enter the forensic investigator's name.");
       return;
     }
-    if (!caseDescription.trim()) {
-      setErrorMsg("Case / Evidence Description is mandatory. Please provide a brief description.");
-      return;
-    }
     if (!recoveryOutputPath.trim()) {
       setErrorMsg("Recovery Output Path is mandatory. Specify where recovered files should be saved.");
       return;
     }
 
-    // Safety Verification: Ensure recovery output path is not on the source evidence device
     const cleanOutput = recoveryOutputPath.trim().toLowerCase();
     const cleanSource = selectedDevice.trim().toLowerCase();
-
     if (cleanOutput === cleanSource || (cleanSource.length > 2 && cleanOutput.includes(cleanSource))) {
       setErrorMsg("SAFETY VIOLATION: Recovery output destination cannot reside on or inside the source evidence device.");
       return;
@@ -513,7 +411,7 @@ export default function FarisRecoveryPage() {
       case_id: caseNumber.trim(),
       evidence_id: evidenceNumber.trim(),
       examiner: examinerName.trim(),
-      description: caseDescription.trim(),
+      description: caseDescription.trim() || `Forensic Case ${caseNumber.trim()}`,
       notes: caseNotes.trim(),
       is_physical: true,
       source_type: "Physical Storage Device",
@@ -530,22 +428,8 @@ export default function FarisRecoveryPage() {
       setIsRunning(true);
       setFarisLock(true);
       setLogs([]);
-      setStepLogs([
-        {
-          timestamp: new Date(now).toTimeString().split(" ")[0],
-          icon: "✓",
-          text: `Device selected: ${selectedDevice}`,
-          type: "info",
-        },
-        {
-          timestamp: new Date(now).toTimeString().split(" ")[0],
-          icon: "▶",
-          text: `Initializing Case ${caseNumber.trim()}...`,
-          type: "start",
-        },
-      ]);
 
-      const res = await fetch(`${FARIS_API}/api/faris/pipeline/start`, {
+      const res = await fetchFaris("/api/faris/pipeline/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -565,12 +449,74 @@ export default function FarisRecoveryPage() {
     }
   };
 
+  // Start Folder Recovery
+  const handleStartFolderRecovery = async () => {
+    setErrorMsg(null);
+
+    if (!folderPath.trim()) {
+      setErrorMsg("Target folder path is required for folder recovery.");
+      return;
+    }
+    if (!caseNumber.trim()) {
+      setErrorMsg("Case Number / Case ID is mandatory.");
+      return;
+    }
+    if (!recoveryOutputPath.trim()) {
+      setErrorMsg("Recovery Output Directory is mandatory.");
+      return;
+    }
+
+    const srcLetter = folderPath.trim().substring(0, 2).toUpperCase();
+    const destLetter = recoveryOutputPath.trim().substring(0, 2).toUpperCase();
+    if (srcLetter.includes(":") && destLetter.includes(":") && srcLetter === destLetter) {
+      setErrorMsg(`SAFETY VIOLATION: Recovery output destination cannot reside on the same drive (${destLetter}) as the source folder (${srcLetter}).`);
+      return;
+    }
+
+    const payload = {
+      case_id: caseNumber.trim(),
+      folder_path: folderPath.trim(),
+      target_device: selectedDevice || undefined,
+      examiner: examinerName.trim() || "Forensic Examiner",
+      recovery_output_path: recoveryOutputPath.trim(),
+      export_destination: recoveryOutputPath.trim(),
+      selected_methods: folderMethods,
+    };
+
+    try {
+      const now = Date.now();
+      setStartTimeMs(now);
+      setElapsedSeconds(0);
+      setIsRunning(true);
+      setFarisLock(true);
+      setLogs([]);
+
+      const res = await fetchFaris("/api/faris/folder/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to start FARIS folder recovery");
+      }
+
+      const data = await res.json();
+      setActiveJobId(data.job_id);
+    } catch (err: any) {
+      setIsRunning(false);
+      setFarisLock(false);
+      setErrorMsg(err.message);
+    }
+  };
+
   const handleExportArtifacts = async () => {
     if (!selectedCaseId || !exportDestDir.trim()) return;
     setIsExporting(true);
     setExportStatus(null);
     try {
-      const res = await fetch(`${FARIS_API}/api/faris/export`, {
+      const res = await fetchFaris("/api/faris/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -591,20 +537,32 @@ export default function FarisRecoveryPage() {
     }
   };
 
-  const stagesList = [
+  const deviceStagesList = [
     { key: "setup", label: "1. Case Initialized" },
-    { key: "acquisition", label: "2. Real Forensic Bit-Stream Acquisition (EWF/E01)" },
+    { key: "acquisition", label: "2. Real Bit-Stream E01 Acquisition" },
     { key: "verification", label: "3. Cryptographic Verification (SHA-256)" },
-    { key: "analysis", label: "4. Partition & Filesystem Structural Analysis" },
-    { key: "discovery", label: "5. Inode & Artifact Discovery (TSK fls)" },
-    { key: "states", label: "6. Allocation State Classification (TSK istat)" },
-    { key: "recovery", label: "7. 10-Branch Adaptive Recovery Execution" },
-    { key: "sanitization", label: "8. Specialized Sanitization Recovery (Stages A–J)" },
-    { key: "validation", label: "9. Deep Format Structural Validation" },
-    { key: "hashing", label: "10. SHA-256 Case Manifest Hashing" },
-    { key: "export", label: "11. Verified Artifacts Export to Recovery Path" },
-    { key: "reporting", label: "12. Multi-Format Reports Generated (JSON/CSV/HTML)" },
+    { key: "analysis", label: "4. Partition & Filesystem Analysis" },
+    { key: "discovery", label: "5. Inode & Artifact Discovery (TSK)" },
+    { key: "states", label: "6. Allocation State Classification" },
+    { key: "recovery", label: "7. 10-Branch Adaptive Recovery" },
+    { key: "sanitization", label: "8. Sanitization Verification (Stages A–J)" },
+    { key: "validation", label: "9. Deep Format Validation" },
+    { key: "hashing", label: "10. SHA-256 Manifest Hashing" },
+    { key: "export", label: "11. Verified Artifacts Export" },
+    { key: "reporting", label: "12. Multi-Format Reports Generated" },
   ];
+
+  const folderStagesList = [
+    { key: "setup", label: "1. Case Workspace Initialized" },
+    { key: "scope_resolution", label: "2. Folder Allocation & LBA Mapping" },
+    { key: "fs_recovery", label: "3. Pass 1: Filesystem Structure Extraction" },
+    { key: "carving", label: "4. Pass 2: Scoped Forensic Carving" },
+    { key: "validation", label: "5. Integrity & Confidence Validation" },
+    { key: "hashing", label: "6. SHA-256 Cryptographic Manifest" },
+    { key: "reporting", label: "7. Multi-Format Forensic Reporting" },
+  ];
+
+  const activeStagesList = recoveryScope === "FOLDER" ? folderStagesList : deviceStagesList;
 
   const getSelectedDeviceObj = () => {
     return devices.find((d: any) => (d.device_id || d.physical_path) === selectedDevice) || null;
@@ -622,17 +580,18 @@ export default function FarisRecoveryPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">FARIS Forensic Recovery System</h1>
               <Badge variant="outline" className="border-blue-500 text-blue-600 dark:text-blue-400 font-mono">
-                Live Physical Device Pipeline
+                {recoveryScope === "FOLDER" ? "Folder-Level Scoped Recovery" : "Live Physical Device Pipeline"}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Physical Device Discovery · Bit-Stream E01 Acquisition · 10-Branch Deep Recovery · Verification & Export
+              {recoveryScope === "FOLDER"
+                ? "Filesystem Hierarchy Preservation · Cluster-to-LBA Extent Mapping · Scoped Carving · Bit-for-Bit Validation"
+                : "Physical Device Discovery · Bit-Stream E01 Acquisition · 10-Branch Deep Recovery · Verification & Export"}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Real Elapsed Time Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/80 border rounded-lg font-mono text-xs shadow-sm">
             <Timer className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-muted-foreground">Elapsed:</span>
@@ -672,7 +631,7 @@ export default function FarisRecoveryPage() {
         <TabsList className="grid grid-cols-4 w-full h-11 bg-muted/60 p-1">
           <TabsTrigger value="pipeline" className="gap-2 text-xs md:text-sm">
             <Play className="w-4 h-4" />
-            Physical Device & Recovery
+            Recovery Pipeline
           </TabsTrigger>
           <TabsTrigger
             value="artifacts"
@@ -718,54 +677,293 @@ export default function FarisRecoveryPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* TAB 1: LIVE DEVICE ACQUISITION & RECOVERY PIPELINE */}
+        {/* TAB 1: LIVE RECOVERY PIPELINE */}
         <TabsContent value="pipeline" className="space-y-6">
+          {/* Recovery Scope Switcher */}
+          <div className="flex items-center justify-between p-3 bg-card border rounded-lg shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Recovery Scope:</span>
+              <div className="flex p-0.5 bg-muted rounded-md border">
+                <Button
+                  size="sm"
+                  variant={recoveryScope === "DEVICE" ? "default" : "ghost"}
+                  onClick={() => setRecoveryScope("DEVICE")}
+                  disabled={isRunning}
+                  className="h-8 text-xs font-semibold gap-1.5 px-3"
+                >
+                  <HardDrive className="h-3.5 w-3.5" /> Entire Physical Storage Device / Raw Image
+                </Button>
+                <Button
+                  size="sm"
+                  variant={recoveryScope === "FOLDER" ? "default" : "ghost"}
+                  onClick={() => setRecoveryScope("FOLDER")}
+                  disabled={isRunning}
+                  className="h-8 text-xs font-semibold gap-1.5 px-3"
+                >
+                  <FolderTree className="h-3.5 w-3.5 text-amber-500" /> Selected Target Folder (Scoped Recovery)
+                </Button>
+              </div>
+            </div>
+
+            <Badge variant="outline" className="font-mono text-xs">
+              {recoveryScope === "FOLDER" ? "Scope: Folder Extents Only" : "Scope: Whole Disk Bit-Stream"}
+            </Badge>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Pre-Start Form */}
+            {/* Form Column */}
             <Card className="lg:col-span-5 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Database className="w-5 h-5 text-primary" />
-                  Forensic Case & Evidence Details
+                  {recoveryScope === "FOLDER" ? "Folder Recovery Setup" : "Forensic Case & Evidence Details"}
                 </CardTitle>
                 <CardDescription>
-                  Select target physical drive and supply mandatory case parameters.
+                  {recoveryScope === "FOLDER"
+                    ? "Specify target folder and inspect allocation scope before initiating recovery."
+                    : "Select target physical drive and supply mandatory case parameters."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Physical Device Selector Only */}
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Select Target Physical Storage Device *
-                  </label>
-                  {devices.length === 0 ? (
-                    <div className="p-3 bg-muted/50 border rounded-md text-xs text-muted-foreground text-center">
-                      Scanning storage subsystem... No physical drives found.
+                {/* Scope: FOLDER Setup Controls */}
+                {recoveryScope === "FOLDER" ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Target Folder Path *
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={folderPath}
+                          onChange={(e) => setFolderPath(e.target.value)}
+                          placeholder="e.g. E:\SecureWipe_Test"
+                          className="text-xs font-mono"
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleResolveScope()}
+                          disabled={isResolvingScope || isRunning}
+                          className="gap-1.5 text-xs font-semibold px-3"
+                        >
+                          <Search className={`w-3.5 h-3.5 ${isResolvingScope ? "animate-spin" : ""}`} />
+                          Inspect Scope
+                        </Button>
+                      </div>
                     </div>
-                  ) : (
-                    <select
-                      value={selectedDevice}
-                      onChange={(e) => setSelectedDevice(e.target.value)}
-                      className="w-full p-2.5 bg-background border rounded-md text-xs font-mono"
-                    >
-                      {devices.map((d: any, idx: number) => (
-                        <option key={idx} value={d.device_id || d.physical_path}>
-                          {d.model} ({d.size_formatted}) [{d.drive_letters || "No Volume"}] — {d.device_id}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {getSelectedDeviceObj() && (
-                    <div className="p-2.5 bg-muted/40 border rounded-md text-[11px] space-y-1 font-mono">
-                      <div>Model: <span className="font-semibold">{getSelectedDeviceObj()?.model}</span></div>
-                      <div>Capacity: <span className="font-semibold">{getSelectedDeviceObj()?.size_formatted}</span> ({getSelectedDeviceObj()?.size_bytes?.toLocaleString()} bytes)</div>
-                      <div>Interface: {getSelectedDeviceObj()?.interface} | Type: {getSelectedDeviceObj()?.device_type}</div>
-                      <div>Serial: {getSelectedDeviceObj()?.serial_number} | Volume: {getSelectedDeviceObj()?.drive_letters}</div>
-                    </div>
-                  )}
-                </div>
 
-                {/* Mandatory Case Details */}
+                    {/* Scope Overview Card */}
+                    {folderScopeData && (
+                      <div className="p-3 bg-muted/40 border rounded-lg space-y-2.5 text-xs font-mono">
+                        <div className="flex items-center justify-between border-b pb-1.5">
+                          <span className="font-bold text-foreground flex items-center gap-1.5">
+                            <Folder className="w-3.5 h-3.5 text-amber-500" />
+                            {folderScopeData.folder_name || folderPath}
+                          </span>
+                          <Badge variant="secondary" className="font-mono text-[10px]">
+                            {folderScopeData.filesystem || "FAT32"} | {folderScopeData.device_path || "\\\\.\\PhysicalDrive1"}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div>
+                            <span className="text-muted-foreground">Directory Cluster:</span>{" "}
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">
+                              {folderScopeData.directory_allocation?.starting_cluster ?? "OS-Managed"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Directory LBA:</span>{" "}
+                            <span className="font-semibold text-primary">
+                              {folderScopeData.directory_allocation?.starting_lba ?? "N/A"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Active Files:</span>{" "}
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {folderScopeData.child_files_count || 0}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Deleted Entries:</span>{" "}
+                            <span className={cn(
+                              "font-semibold",
+                              (folderScopeData.deleted_files_count || 0) > 0
+                                ? "text-purple-600 dark:text-purple-400 font-bold"
+                                : "text-muted-foreground"
+                            )}>
+                              {folderScopeData.deleted_files_count || 0}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Total Mapped Sectors:</span>{" "}
+                            <span className="font-semibold">
+                              {folderScopeData.combined_storage_map?.total_sectors || 0} ({((folderScopeData.combined_storage_map?.total_sectors || 0) * (folderScopeData.bytes_per_sector || 512)).toLocaleString()} bytes)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Child Active Files Breakdown */}
+                        {folderScopeData.child_files && folderScopeData.child_files.length > 0 && (
+                          <div className="pt-2 border-t space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1">
+                                <FileCheck className="w-3 h-3 text-emerald-500" />
+                                Active Files ({folderScopeData.child_files.length}):
+                              </span>
+                            </div>
+                            <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                              {folderScopeData.child_files.map((cf: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between p-1.5 bg-background border rounded text-[10px]"
+                                >
+                                  <span className="font-semibold truncate max-w-[130px]" title={cf.full_path || cf.name}>
+                                    {cf.name || cf.relative_path}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <span>Clus {cf.starting_cluster ?? "?"}</span>
+                                    <span className="text-primary font-semibold">
+                                      LBA {cf.starting_lba ?? "N/A"}
+                                    </span>
+                                    <span>{cf.size ? `${cf.size}B` : "0B"}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Deleted Directory Entries Breakdown */}
+                        {folderScopeData.deleted_entries && folderScopeData.deleted_entries.length > 0 && (
+                          <div className="pt-2 border-t space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400 tracking-wider flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-purple-500" />
+                                Discovered Deleted Entries ({folderScopeData.deleted_entries.length}):
+                              </span>
+                              <Badge variant="outline" className="text-[9px] bg-purple-500/10 text-purple-600 border-purple-500/30 px-1 py-0">
+                                0xE5 Marker Detected
+                              </Badge>
+                            </div>
+                            <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                              {folderScopeData.deleted_entries.map((df: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between p-1.5 bg-purple-500/5 border border-purple-500/20 rounded text-[10px]"
+                                >
+                                  <div className="flex items-center gap-1 truncate max-w-[130px]">
+                                    <Badge variant="secondary" className="text-[8px] bg-purple-500/20 text-purple-700 dark:text-purple-300 font-mono px-1 py-0">
+                                      DEL
+                                    </Badge>
+                                    <span className="font-semibold truncate text-purple-900 dark:text-purple-200" title={df.full_path || df.name}>
+                                      {df.name || df.relative_path}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <span>Clus {df.starting_cluster ?? "0"}</span>
+                                    <span className="text-primary font-semibold">
+                                      LBA {df.starting_lba ?? "N/A"}
+                                    </span>
+                                    <span>{df.size ? `${df.size}B` : "0B"}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="pt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>Layer: {folderScopeData.mapping_layer || "Device Logical LBA"}</span>
+                          <a
+                            href={`/inspector?drive=${encodeURIComponent(folderPath.substring(0, 2))}&mode=folder&folder_path=${encodeURIComponent(folderPath)}`}
+                            className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-sans"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open in Sector Inspector <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Forensic Methods Checklist */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-xs font-semibold text-muted-foreground">Forensic Recovery Methods</label>
+                      <div className="grid grid-cols-1 gap-1.5 text-xs bg-muted/30 p-2.5 rounded-lg border">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={folderMethods.includes("fs_hierarchy")}
+                            onChange={(e) => {
+                              if (e.target.checked) setFolderMethods([...folderMethods, "fs_hierarchy"]);
+                              else setFolderMethods(folderMethods.filter((m) => m !== "fs_hierarchy"));
+                            }}
+                            className="rounded"
+                          />
+                          <span>Pass 1: Filesystem Hierarchy & Extents Extraction</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={folderMethods.includes("scoped_carving")}
+                            onChange={(e) => {
+                              if (e.target.checked) setFolderMethods([...folderMethods, "scoped_carving"]);
+                              else setFolderMethods(folderMethods.filter((m) => m !== "scoped_carving"));
+                            }}
+                            className="rounded"
+                          />
+                          <span>Pass 2: Scoped Forensic Signature Carving</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={folderMethods.includes("sha256_validation")}
+                            onChange={(e) => {
+                              if (e.target.checked) setFolderMethods([...folderMethods, "sha256_validation"]);
+                              else setFolderMethods(folderMethods.filter((m) => m !== "sha256_validation"));
+                            }}
+                            className="rounded"
+                          />
+                          <span>Pass 3: Cryptographic SHA-256 Bit-for-Bit Validation</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Scope: DEVICE Physical Media Selector */
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Select Target Physical Storage Device *
+                    </label>
+                    {devices.length === 0 ? (
+                      <div className="p-3 bg-muted/50 border rounded-md text-xs text-muted-foreground text-center">
+                        Scanning storage subsystem... No physical drives found.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedDevice}
+                        onChange={(e) => setSelectedDevice(e.target.value)}
+                        className="w-full p-2.5 bg-background border rounded-md text-xs font-mono"
+                      >
+                        {devices.map((d: any, idx: number) => (
+                          <option key={idx} value={d.device_id || d.physical_path}>
+                            {d.model} ({d.size_formatted}) [{d.drive_letters || "No Volume"}] — {d.device_id}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {getSelectedDeviceObj() && (
+                      <div className="p-2.5 bg-muted/40 border rounded-md text-[11px] space-y-1 font-mono">
+                        <div>Model: <span className="font-semibold">{getSelectedDeviceObj()?.model}</span></div>
+                        <div>Capacity: <span className="font-semibold">{getSelectedDeviceObj()?.size_formatted}</span> ({getSelectedDeviceObj()?.size_bytes?.toLocaleString()} bytes)</div>
+                        <div>Interface: {getSelectedDeviceObj()?.interface} | Type: {getSelectedDeviceObj()?.device_type}</div>
+                        <div>Serial: {getSelectedDeviceObj()?.serial_number} | Volume: {getSelectedDeviceObj()?.drive_letters}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Shared Mandatory Case Details */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-muted-foreground">Case Number *</label>
@@ -804,109 +1002,59 @@ export default function FarisRecoveryPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">Partition Offset</label>
+                    <label className="text-xs font-semibold text-muted-foreground">Recovery Output Directory *</label>
                     <Input
-                      value={partitionOffset}
-                      onChange={(e) => setPartitionOffset(e.target.value)}
+                      value={recoveryOutputPath}
+                      onChange={(e) => setRecoveryOutputPath(e.target.value)}
                       className="text-xs font-mono"
-                      placeholder="Auto-detect (leave blank)"
+                      placeholder="e.g. D:/FARIS_Recovery_Output"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Case / Evidence Description *</label>
-                  <Input
-                    value={caseDescription}
-                    onChange={(e) => setCaseDescription(e.target.value)}
-                    className="text-xs"
-                    placeholder="e.g. Physical forensic acquisition and artifact recovery"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Case Notes</label>
-                  <Input
-                    value={caseNotes}
-                    onChange={(e) => setCaseNotes(e.target.value)}
-                    className="text-xs"
-                    placeholder="e.g. Unattended acquisition using bundled ewfacquire with SHA-256"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">
-                    Recovery Output Directory *
-                  </label>
-                  <Input
-                    value={recoveryOutputPath}
-                    onChange={(e) => setRecoveryOutputPath(e.target.value)}
-                    className="text-xs font-mono"
-                    placeholder="e.g. D:/FARIS_Recovery_Output"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Separate writable folder where all recovered artifacts will physically be exported.
-                  </p>
-                </div>
-
-                {/* Pre-Start Confirmation Summary Box */}
-                <div className="p-3 bg-muted/60 border rounded-lg text-xs space-y-1.5 font-mono">
-                  <div className="font-bold text-foreground text-[11px] uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-blue-600" />
-                    Pre-Start Verification Summary
-                  </div>
-                  <div><span className="text-muted-foreground">SOURCE DEVICE:</span> <span className="font-semibold">{selectedDevice || "None Selected"}</span></div>
-                  <div><span className="text-muted-foreground">CASE NUMBER:</span> <span className="font-semibold">{caseNumber || "(Required)"}</span></div>
-                  <div><span className="text-muted-foreground">EVIDENCE NUMBER:</span> <span className="font-semibold">{evidenceNumber || "(Required)"}</span></div>
-                  <div><span className="text-muted-foreground">EXAMINER:</span> <span className="font-semibold">{examinerName || "(Required)"}</span></div>
-                  <div><span className="text-muted-foreground">RECOVERY OUTPUT:</span> <span className="font-semibold">{recoveryOutputPath || "(Required)"}</span></div>
-                </div>
-
-                {/* Clear Boundary Notice */}
+                {/* Evidence Protection Box */}
                 <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg text-[11px] space-y-1 text-blue-800 dark:text-blue-300">
                   <div className="font-bold flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                    Evidence Protection Architecture
+                    Strict Read-Only & Output Isolation Guarantee
                   </div>
-                  <div>• <span className="font-semibold">Original Source:</span> READ-ONLY / Never Modified</div>
-                  <div>• <span className="font-semibold">Acquired Image (.E01):</span> Writable Case Evidence Destination</div>
-                  <div>• <span className="font-semibold">Recovery Output:</span> Writable User-Selected Destination</div>
+                  <div>• <span className="font-semibold">Source Media:</span> Strictly READ-ONLY (GENERIC_READ / No mutation)</div>
+                  <div>• <span className="font-semibold">Destination:</span> Isolated output folder ({recoveryOutputPath || "D:/FARIS_Recovery_Output"})</div>
                 </div>
               </CardContent>
               <CardFooter>
                 <Button
-                  onClick={handleStartPipeline}
+                  onClick={recoveryScope === "FOLDER" ? handleStartFolderRecovery : handleStartPipeline}
                   disabled={isRunning}
                   className="w-full gap-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow"
                 >
                   {isRunning ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Executing FARIS Pipeline ({formatElapsed(elapsedSeconds)})...
+                      Executing Recovery ({formatElapsed(elapsedSeconds)})...
                     </>
                   ) : (
                     <>
                       <Play className="w-4 h-4" />
-                      START FORENSIC ACQUISITION & RECOVERY
+                      {recoveryScope === "FOLDER" ? "START FOLDER FORENSIC RECOVERY" : "START FORENSIC ACQUISITION & RECOVERY"}
                     </>
                   )}
                 </Button>
               </CardFooter>
             </Card>
 
-            {/* Live Progress & Execution Telemetry */}
+            {/* Live Telemetry Column */}
             <div className="lg:col-span-7 flex flex-col gap-5">
-              {/* Progress Overview */}
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base font-bold flex items-center gap-2">
                         <Cpu className="w-4 h-4 text-blue-600" />
-                        Live Pipeline Execution Telemetry
+                        Live Recovery Telemetry
                       </CardTitle>
                       <CardDescription className="text-xs">
-                        {activeJobId ? `Job ID: ${activeJobId} · Case: ${pipelineState?.case_id || caseNumber || "Pending"}` : "Waiting to launch pipeline"}
+                        {activeJobId ? `Job ID: ${activeJobId} · Scope: ${pipelineState?.scope || recoveryScope}` : "Waiting to launch pipeline"}
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -934,7 +1082,7 @@ export default function FarisRecoveryPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium">
-                      <span>Overall Pipeline Progress</span>
+                      <span>Overall Progress</span>
                       <span className="font-mono">{pipelineState?.progress_pct?.toFixed(0) || 0}%</span>
                     </div>
                     <Progress value={pipelineState?.progress_pct || 0} className="h-2.5" />
@@ -942,7 +1090,7 @@ export default function FarisRecoveryPage() {
 
                   {/* Stage By Stage Tracker */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
-                    {stagesList.map((st, i) => {
+                    {activeStagesList.map((st) => {
                       const stState = pipelineState?.stages?.[st.key];
                       const isComplete = stState?.status === "COMPLETED";
                       const isCurrent = stState?.status === "RUNNING";
@@ -1005,7 +1153,7 @@ export default function FarisRecoveryPage() {
                   >
                     {logs.length === 0 ? (
                       <div className="text-zinc-500 italic">
-                        Ready. Fill case details and click &apos;START FORENSIC ACQUISITION & RECOVERY&apos; to begin live physical acquisition and recovery.
+                        Ready. Fill case parameters and click &apos;START RECOVERY&apos; to begin.
                       </div>
                     ) : (
                       logs.map((log, idx) => (
@@ -1029,351 +1177,204 @@ export default function FarisRecoveryPage() {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Small Live Step Progress Terminal (CHANGE 2) */}
-              <Card className="shadow-sm flex flex-col">
-                <CardHeader className="py-2 px-3 bg-muted/60 border-b flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold tracking-tight text-foreground">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    FARIS STEP PROGRESS
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      Elapsed: <span className="font-bold text-foreground">{formatElapsed(elapsedSeconds)}</span>
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-mono">
-                      {stepLogs.length} steps
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div
-                    ref={stepTerminalRef}
-                    className="h-36 p-3 bg-zinc-950 text-zinc-300 font-mono text-[11px] leading-relaxed overflow-y-auto space-y-1 border-t"
-                  >
-                    {stepLogs.length === 0 ? (
-                      <div className="text-zinc-500 italic">
-                        Waiting for pipeline execution... Stage steps will appear here in real-time.
-                      </div>
-                    ) : (
-                      stepLogs.map((step, idx) => (
-                        <div key={idx} className="flex items-start gap-2">
-                          <span className="text-zinc-500 select-none">[{step.timestamp}]</span>
-                          <span
-                            className={`font-bold select-none ${
-                              step.type === "success"
-                                ? "text-emerald-400"
-                                : step.type === "fail"
-                                ? "text-red-400"
-                                : step.type === "na"
-                                ? "text-zinc-500"
-                                : "text-blue-400"
-                            }`}
-                          >
-                            {step.icon}
-                          </span>
-                          <span
-                            className={
-                              step.type === "success"
-                                ? "text-emerald-300 font-medium"
-                                : step.type === "fail"
-                                ? "text-red-300 font-bold"
-                                : step.type === "na"
-                                ? "text-zinc-400"
-                                : "text-zinc-100"
-                            }
-                          >
-                            {step.text}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
-        </TabsContent>
 
-        {/* TAB 2: RECOVERED ARTIFACTS & DEEP VALIDATION */}
-        <TabsContent value="artifacts" className="space-y-6">
-          {!selectedCaseId || !caseDetails ? (
-            <Card className="shadow-sm border-dashed">
-              <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-4">
-                <div className="p-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-900">
-                  <FileCheck2 className="w-8 h-8" />
-                </div>
-                <div className="space-y-1.5 max-w-md">
-                  <h3 className="text-lg font-bold tracking-tight">Perform Recovery to View Results</h3>
-                  <p className="text-sm text-muted-foreground">
-                    No recovered artifacts to display. Please configure your physical device and perform a forensic recovery from the &apos;Physical Device &amp; Recovery&apos; tab to view results.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setActiveTab("pipeline")}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
-                >
-                  <Play className="w-4 h-4" />
-                  Go to Physical Device &amp; Recovery
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <Card className="lg:col-span-4 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Forensic Cases</CardTitle>
-                  <CardDescription className="text-xs">Select case to view validated recovered artifacts.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
-                  {cases.length === 0 ? (
-                    <div className="text-xs text-muted-foreground p-3 text-center">No cases created yet.</div>
-                  ) : (
-                    cases.map((c) => (
-                      <div
-                        key={c.case_id}
-                        onClick={() => {
-                          setSelectedCaseId(c.case_id);
-                          loadCaseDetails(c.case_id);
-                        }}
-                        className={`p-3 rounded-lg border cursor-pointer text-xs space-y-1 transition-colors ${
-                          selectedCaseId === c.case_id
-                            ? "bg-blue-500/10 border-blue-500/50 text-blue-700 dark:text-blue-300"
-                            : "hover:bg-muted/50"
-                        }`}
-                      >
-                        <div className="font-bold flex items-center justify-between">
-                          <span>{c.case_id}</span>
-                          <Badge variant="outline" className="text-[10px]">{c.examiner}</Badge>
-                        </div>
-                        <div className="text-muted-foreground truncate">{c.case_name || c.description}</div>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-8 shadow-sm">
-                <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          {/* ITEMIZE FORENSIC ARTIFACT LEDGER (When Folder Recovery finishes or has items) */}
+          {pipelineState?.result?.recovered_items && pipelineState.result.recovered_items.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">Validated Forensic Recoveries</CardTitle>
-                    <CardDescription className="text-xs">
-                      Case: <span className="font-mono font-semibold">{selectedCaseId || "None"}</span> ·{" "}
-                      Total Recovered: {caseDetails?.validation_report?.total_validated || 0}
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <FileCheck2 className="w-4 h-4 text-emerald-600" />
+                      Recovered Folder Artifacts & Cryptographic Verification Ledger
+                    </CardTitle>
+                    <CardDescription className="text-xs font-mono">
+                      Destination: {pipelineState.result.destination_directory} · Total Items: {pipelineState.result.total_recovered_count}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleExportArtifacts()}
-                      disabled={isExporting || !selectedCaseId}
-                      className="gap-1.5 text-xs"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Export Verified Files
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {exportStatus && (
-                    <div className="p-3 bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-300 rounded-md text-xs">
-                      {exportStatus}
-                    </div>
-                  )}
-
-                  <div className="rounded-lg border overflow-x-auto max-h-[450px]">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-muted/60 text-muted-foreground font-semibold border-b sticky top-0">
-                        <tr>
-                          <th className="p-2.5">File Name</th>
-                          <th className="p-2.5">Method / Branch</th>
-                          <th className="p-2.5">Size</th>
-                          <th className="p-2.5">Validation</th>
-                          <th className="p-2.5">Confidence</th>
-                          <th className="p-2.5">SHA-256 Digest</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y font-mono">
-                        {!caseDetails?.validation_report?.artifacts?.length ? (
-                          <tr>
-                            <td colSpan={6} className="p-6 text-center text-muted-foreground font-sans">
-                              No recovered artifacts found for this case. Run the master recovery pipeline first.
+                  <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                    {pipelineState.result.recovered_files_count} FS Files | {pipelineState.result.carved_artifacts_count} Scoped Carved
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-semibold border-y">
+                      <tr>
+                        <th className="py-2.5 px-4">Relative Path</th>
+                        <th className="py-2.5 px-3">State</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Validation</th>
+                        <th className="py-2.5 px-3">Size</th>
+                        <th className="py-2.5 px-3">Start Cluster</th>
+                        <th className="py-2.5 px-3">Device Logical LBA</th>
+                        <th className="py-2.5 px-3">SHA-256 Digest</th>
+                        <th className="py-2.5 px-3">Recovery Source & Method</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y font-mono text-[11px]">
+                      {pipelineState.result.recovered_items.map((item: any, idx: number) => {
+                        const isDel = item.state === "DELETED" || item.recovery_source?.includes("Deleted") || item.recovery_source?.includes("1B");
+                        const isCarved = item.state === "CARVED" || item.recovery_source?.includes("Carving") || item.recovery_source?.includes("Pass 2");
+                        
+                        return (
+                          <tr key={idx} className={cn("hover:bg-muted/30 transition-colors", isDel && "bg-purple-500/5 hover:bg-purple-500/10")}>
+                            <td className="py-2 px-4 font-semibold text-foreground flex items-center gap-1.5">
+                              {isDel ? (
+                                <span className="text-purple-600 dark:text-purple-400 font-bold" title="Deleted Directory Entry">🗑️</span>
+                              ) : isCarved ? (
+                                <span className="text-amber-500" title="Signature Carved">⚡</span>
+                              ) : (
+                                <span className="text-emerald-500" title="Active File">📄</span>
+                              )}
+                              <span className="truncate max-w-[200px]" title={item.relative_path || item.name}>
+                                {item.relative_path || item.name}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3">
+                              {isDel ? (
+                                <Badge variant="outline" className="text-[9px] bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30 px-1.5 py-0 font-bold">
+                                  DELETED
+                                </Badge>
+                              ) : isCarved ? (
+                                <Badge variant="outline" className="text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 px-1.5 py-0 font-bold">
+                                  CARVED
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[9px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 px-1.5 py-0 font-bold">
+                                  ACTIVE
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              <Badge
+                                variant={item.status === "RECOVERED" ? "default" : "secondary"}
+                                className="text-[10px] uppercase"
+                              >
+                                {item.status || "OK"}
+                              </Badge>
+                            </td>
+                            <td className="py-2 px-3">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[9px] font-mono px-1.5 py-0",
+                                  item.confidence === "HIGH"
+                                    ? "bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30"
+                                    : item.confidence === "MEDIUM"
+                                    ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 border-yellow-500/30"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                              >
+                                {item.validation || item.confidence || "VALID"}
+                              </Badge>
+                            </td>
+                            <td className="py-2 px-3">{item.size_bytes !== undefined ? `${item.size_bytes.toLocaleString()} B` : "N/A"}</td>
+                            <td className="py-2 px-3 text-amber-600 dark:text-amber-400">
+                              {item.starting_cluster ?? "N/A"}
+                            </td>
+                            <td className="py-2 px-3 text-primary">
+                              {item.starting_lba ? `${item.starting_lba} – ${item.ending_lba || item.starting_lba}` : "N/A"}
+                            </td>
+                            <td className="py-2 px-3 truncate max-w-[160px]" title={item.sha256}>
+                              {item.sha256 ? (
+                                <span className="text-emerald-700 dark:text-emerald-300 font-mono text-[10px]">{item.sha256.substring(0, 16)}...</span>
+                              ) : (
+                                <span className="text-muted-foreground italic">None</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 font-sans text-[11px] text-muted-foreground truncate max-w-[180px]" title={item.recovery_method || item.recovery_source}>
+                              {item.recovery_source || item.recovery_method}
                             </td>
                           </tr>
-                        ) : (
-                          caseDetails.validation_report.artifacts.map((art: any, i: number) => (
-                            <tr key={i} className="hover:bg-muted/30">
-                              <td className="p-2.5 font-sans font-medium text-foreground truncate max-w-[180px]">
-                                {art.file || art.filename || `Artifact_${i+1}`}
-                              </td>
-                              <td className="p-2.5 text-muted-foreground text-[11px] truncate max-w-[140px]">
-                                {art.recovery_method || art.source_branch || "Signature/Inode"}
-                              </td>
-                              <td className="p-2.5 whitespace-nowrap">
-                                {art.size_bytes !== undefined ? `${(art.size_bytes / 1024).toFixed(1)} KB` : "N/A"}
-                              </td>
-                              <td className="p-2.5">
-                                <Badge
-                                  variant={
-                                    art.validation_status === "VALID"
-                                      ? "default"
-                                      : art.validation_status === "PARTIALLY_VALID"
-                                      ? "secondary"
-                                      : "destructive"
-                                  }
-                                  className="text-[10px] px-1.5 py-0"
-                                >
-                                  {art.validation_status || "UNKNOWN"}
-                                </Badge>
-                              </td>
-                              <td className="p-2.5 font-bold">
-                                {art.confidence_score ? `${art.confidence_score}%` : (art.confidence || "HIGH")}
-                              </td>
-                              <td className="p-2.5 text-[10px] text-muted-foreground truncate max-w-[120px]" title={art.sha256}>
-                                {art.sha256 || "N/A"}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* TAB 2: RECOVERED ARTIFACTS & VALIDATION */}
+        <TabsContent value="artifacts" className="space-y-6">
+          {!selectedCaseId || !caseDetails ? (
+            <Card className="p-8 text-center text-muted-foreground text-sm">
+              No case selected. Select or create a case from the Case Explorer tab to inspect verified artifacts.
+            </Card>
+          ) : (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <FileCheck2 className="w-4 h-4 text-emerald-600" />
+                  Case {selectedCaseId} — Verified Artifact Inventory
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Validation report and structural confidence scores.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-muted/40 border rounded-lg text-xs font-mono space-y-2">
+                  <div><span className="text-muted-foreground">CASE ID:</span> {selectedCaseId}</div>
+                  <div><span className="text-muted-foreground">EXAMINER:</span> {caseDetails.metadata?.examiner || "Examiner"}</div>
+                  <div><span className="text-muted-foreground">REPORTS:</span> {Object.keys(caseDetails.reports || {}).join(", ") || "None"}</div>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
         {/* TAB 3: CASE EXPLORER & REPORTS */}
         <TabsContent value="explorer" className="space-y-6">
-          {!selectedCaseId || !caseDetails ? (
-            <Card className="shadow-sm border-dashed">
-              <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-4">
-                <div className="p-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-900">
-                  <FileText className="w-8 h-8" />
-                </div>
-                <div className="space-y-1.5 max-w-md">
-                  <h3 className="text-lg font-bold tracking-tight">Perform Recovery to View Results</h3>
-                  <p className="text-sm text-muted-foreground">
-                    No case reports generated yet. Forensic reports (JSON, CSV, HTML) and evidence manifests will be compiled once forensic recovery is performed.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setActiveTab("pipeline")}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
-                >
-                  <Play className="w-4 h-4" />
-                  Go to Physical Device &amp; Recovery
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  Case Reports & Documentation
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Download official forensic reports generated for Case: <span className="font-mono font-semibold">{selectedCaseId}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <a
-                    href={`${FARIS_API}/api/faris/report/${selectedCaseId}/json`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-4 border rounded-xl bg-card hover:bg-muted/50 flex flex-col gap-2 transition-colors"
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <FolderTree className="w-4 h-4 text-primary" />
+                Case Catalog & Multi-Format Reports
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {cases.map((c: any, idx: number) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setSelectedCaseId(c.case_id);
+                      loadCaseDetails(c.case_id);
+                    }}
+                    className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                      selectedCaseId === c.case_id ? "bg-primary/10 border-primary" : "bg-card hover:bg-muted/40"
+                    }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="font-mono text-xs">JSON</Badge>
-                      <Download className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="font-bold text-sm">Machine-Readable Case JSON</div>
-                    <p className="text-xs text-muted-foreground">Complete case metadata, hash manifests, and recovery logs.</p>
-                  </a>
-
-                  <a
-                    href={`${FARIS_API}/api/faris/report/${selectedCaseId}/csv`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-4 border rounded-xl bg-card hover:bg-muted/50 flex flex-col gap-2 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="font-mono text-xs">CSV</Badge>
-                      <Download className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="font-bold text-sm">Recovered Artifacts Spreadsheet</div>
-                    <p className="text-xs text-muted-foreground">Tabular list of all recovered files, hashes, sizes, and validation status.</p>
-                  </a>
-
-                  <a
-                    href={`${FARIS_API}/api/faris/report/${selectedCaseId}/html`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-4 border rounded-xl bg-card hover:bg-muted/50 flex flex-col gap-2 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="font-mono text-xs">HTML</Badge>
-                      <Download className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="font-bold text-sm">Official Forensic Court Report</div>
-                    <p className="text-xs text-muted-foreground">Printable court-ready HTML report with chain of custody and statistics.</p>
-                  </a>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <div className="font-bold text-xs">{c.case_id}</div>
+                    <div className="text-[11px] text-muted-foreground">{c.case_name}</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">Examiner: {c.examiner}</div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* TAB 4: CHAIN OF CUSTODY & AUDIT */}
         <TabsContent value="audit" className="space-y-6">
-          {!selectedCaseId || !caseDetails ? (
-            <Card className="shadow-sm border-dashed">
-              <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-4">
-                <div className="p-4 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full border border-green-200 dark:border-green-900">
-                  <ShieldCheck className="w-8 h-8" />
-                </div>
-                <div className="space-y-1.5 max-w-md">
-                  <h3 className="text-lg font-bold tracking-tight">Perform Recovery to View Results</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Chain of custody logs are generated during live physical device acquisition and recovery. Perform a recovery to view cryptographic audit trails.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setActiveTab("pipeline")}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm"
-                >
-                  <Play className="w-4 h-4" />
-                  Go to Physical Device &amp; Recovery
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-green-600" />
-                  Immutable SHA-256 Chain of Custody Audit Log
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Forward-hash chained tamper-evident audit record for Case: <span className="font-mono font-semibold">{selectedCaseId}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="p-4 bg-muted/40 border rounded-lg text-xs font-mono space-y-2 max-h-96 overflow-y-auto">
-                  <div className="text-muted-foreground font-sans">
-                    Total cryptographic audit entries: {caseDetails?.audit_trail_count || 0}
-                  </div>
-                  <div className="text-[11px] leading-relaxed text-foreground">
-                    Audit events are recorded in real-time under <code className="bg-background px-1.5 py-0.5 rounded">FARIS/cases/{selectedCaseId}/audit/audit_trail.jsonl</code> with forward-linked SHA-256 signatures ensuring verifiable legal provenance.
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Cryptographically Chained Audit Trail
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                All forensic actions, scope resolutions, carving operations, and exports are recorded in immutable SHA-256 hash-chained ledgers.
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -1,0 +1,19 @@
+{
+  "case_id": "test_pipe_1788633889",
+  "case_name": "Full Pipeline Test",
+  "created_at": "2026-09-05T18:44:49.863731+00:00",
+  "operator": "Automated Quality Engineer",
+  "evidence": [
+    {
+      "evidence_id": "EVID_pipeline_test",
+      "evidence_type": "Disk Image",
+      "path": "pipeline_test.raw",
+      "exists": true,
+      "size_bytes": 6189
+    }
+  ],
+  "analysis_history": [],
+  "recovery_history": [],
+  "validation_history": [],
+  "report_history": []
+}

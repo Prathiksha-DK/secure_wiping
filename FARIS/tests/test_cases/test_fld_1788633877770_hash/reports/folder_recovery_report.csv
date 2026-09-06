@@ -1,0 +1,2 @@
+Relative Path,File Name,Status,Size (Bytes),SHA-256,Starting Cluster,Starting LBA,Ending LBA,Recovery Source,Integrity Verified
+sample.bin,sample.bin,RECOVERED,43,1f03bda5c3cd6994558c4338f632b29ceab69ff2b636978a7bd58fe7cb18d415,N/A,N/A,N/A,Pass 1 (Filesystem Allocation),True

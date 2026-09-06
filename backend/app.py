@@ -72,6 +72,36 @@ else:
     CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # ---------------------------------------------------------------------------
+# FARIS Reverse Proxy Route (Forwards /api/faris/* to port 8760)
+# ---------------------------------------------------------------------------
+import urllib.request
+import urllib.error
+
+@app.route("/api/faris/<path:subpath>", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+def proxy_faris(subpath):
+    if request.method == "OPTIONS":
+        return Response(status=204)
+    target_url = f"http://127.0.0.1:8760/api/faris/{subpath}"
+    if request.query_string:
+        target_url += f"?{request.query_string.decode('utf-8')}"
+    
+    headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
+    data = request.get_data() if request.method in ("POST", "PUT", "PATCH") else None
+    
+    req = urllib.request.Request(target_url, data=data, headers=headers, method=request.method)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            content = resp.read()
+            resp_headers = [(k, v) for k, v in resp.getheaders() if k.lower() not in ("content-length", "transfer-encoding", "content-encoding")]
+            return Response(content, status=resp.status, headers=resp_headers)
+    except urllib.error.HTTPError as e:
+        content = e.read()
+        return Response(content, status=e.code, headers=[("Content-Type", "application/json")])
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"FARIS service connection error: {str(e)}"}), 502
+
+
+# ---------------------------------------------------------------------------
 # Database Helpers for Wipe History & Legacy Reports
 # ---------------------------------------------------------------------------
 import tempfile
@@ -498,21 +528,62 @@ def post_inspector_device_info():
 
 @app.post("/api/inspector/read-hex")
 def post_inspector_read_hex():
-    """Read sector/block bytes in hex and ASCII (Strictly Read-Only)."""
+    """Read sector/block bytes in hex and ASCII (Strictly Read-Only). Supports Mode A and Mode B."""
     try:
+        import importlib, storage_inspector
+        importlib.reload(storage_inspector)
         from storage_inspector import read_storage_hex_sector
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
         lba = int(body.get("lba", 0))
         sector_size = int(body.get("sector_size", 512))
         sector_count = int(body.get("sector_count", 1))
+        mode = body.get("mode", "device")
+        sub_view = body.get("sub_view", "combined")
+        child_file_path = body.get("child_file_path")
+        extent_index = body.get("extent_index")
+        relative_sector = body.get("relative_sector")
+        target_device = body.get("target_device")
+
+        if extent_index is not None:
+            extent_index = int(extent_index)
+        if relative_sector is not None:
+            relative_sector = int(relative_sector)
 
         if not target:
             return jsonify({"error": "Missing target parameter"}), 400
 
         result = read_storage_hex_sector(
-            target, lba=lba, sector_size=sector_size, sector_count=sector_count
+            target,
+            lba=lba,
+            sector_size=sector_size,
+            sector_count=sector_count,
+            mode=mode,
+            sub_view=sub_view,
+            child_file_path=child_file_path,
+            extent_index=extent_index,
+            relative_sector=relative_sector,
+            target_device=target_device,
         )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/inspector/folder-allocation")
+def post_inspector_folder_allocation():
+    """Retrieve full read-only storage allocation map for a folder (Directory Table, Child Files, Combined Map)."""
+    try:
+        import importlib, storage_inspector
+        importlib.reload(storage_inspector)
+        from storage_inspector import get_folder_storage_allocation
+        body = request.get_json(silent=True) or {}
+        path = body.get("path") or body.get("folder_path", "")
+        target_device = body.get("target_device") or body.get("target")
+
+        if not path:
+            return jsonify({"error": "Missing path parameter"}), 400
+
+        result = get_folder_storage_allocation(folder_path=path, target_device=target_device)
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -537,6 +608,8 @@ def post_inspector_compare():
 def post_inspector_search():
     """Unified search: raw storage byte search and filesystem-aware search (strictly read-only)."""
     try:
+        import importlib, storage_inspector
+        importlib.reload(storage_inspector)
         from storage_inspector import unified_storage_search
         body = request.get_json(silent=True) or {}
         target = body.get("target", "")
@@ -566,6 +639,8 @@ def post_inspector_search():
 def post_inspector_file_details():
     """Retrieve full read-only metadata, preview, and optional SHA-256 for a file or folder."""
     try:
+        import importlib, storage_inspector
+        importlib.reload(storage_inspector)
         from storage_inspector import get_file_details
         body = request.get_json(silent=True) or {}
         path = body.get("path") or body.get("file_path", "")
@@ -601,6 +676,239 @@ def post_inspector_export():
         return jsonify(report_data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# API: FARIS Forensic Recovery & Folder-Level Recovery Integration
+# ---------------------------------------------------------------------------
+import threading as _faris_threading
+_faris_jobs_lock = _faris_threading.Lock()
+_faris_jobs: Dict[str, Dict[str, Any]] = {}
+
+def _get_faris_api():
+    faris_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "FARIS")
+    if os.path.exists(faris_root) and str(faris_root) not in sys.path:
+        sys.path.insert(0, str(faris_root))
+    faris_app = os.path.join(faris_root, "application")
+    if os.path.exists(faris_app) and str(faris_app) not in sys.path:
+        sys.path.insert(0, str(faris_app))
+    from application.faris_api import faris_api
+    return faris_api
+
+@app.get("/api/faris/health")
+def api_faris_health():
+    return jsonify({
+        "status": "SUCCESS",
+        "service": "FARIS Forensic Recovery Service (Mounted on Core API)",
+        "port": DEFAULT_PORT,
+        "timestamp": time.time()
+    }), 200
+
+@app.get("/api/faris/engine-status")
+def api_faris_engine_status():
+    try:
+        api = _get_faris_api()
+        return jsonify(api.get_engine_status()), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.get("/api/faris/devices")
+def api_faris_devices():
+    try:
+        api = _get_faris_api()
+        return jsonify(api.discover_devices()), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.get("/api/faris/cases")
+def api_faris_list_cases():
+    try:
+        _get_faris_api()
+        from core.paths import get_cases_dir
+        cases_list = []
+        cases_dir = get_cases_dir()
+        if cases_dir.exists():
+            for c_dir in sorted(cases_dir.iterdir()):
+                if c_dir.is_dir() and not c_dir.name.startswith("."):
+                    meta_file = c_dir / "case_meta.json"
+                    meta = {}
+                    if meta_file.exists():
+                        try:
+                            with open(meta_file, "r", encoding="utf-8") as f:
+                                meta = json.load(f)
+                        except Exception:
+                            pass
+                    cases_list.append({
+                        "case_id": c_dir.name,
+                        "path": str(c_dir),
+                        "created_at": meta.get("created_at", ""),
+                        "examiner": meta.get("examiner", "Examiner"),
+                        "description": meta.get("description", ""),
+                        "case_name": meta.get("case_name", c_dir.name),
+                    })
+        return jsonify({"status": "SUCCESS", "cases": cases_list}), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.get("/api/faris/cases/<case_id>")
+def api_faris_case_detail(case_id):
+    try:
+        _get_faris_api()
+        from core.paths import resolve_case_dir
+        case_dir = resolve_case_dir(case_id)
+        if not case_dir.exists():
+            return jsonify({"status": "ERROR", "message": f"Case '{case_id}' not found."}), 404
+        details = {
+            "case_id": case_id,
+            "path": str(case_dir),
+            "metadata": {},
+            "analysis": None,
+            "discovered_artifacts": None,
+            "artifact_states": None,
+            "recovery_summary": None,
+            "validation_report": None,
+            "reports": {},
+            "audit_trail_count": 0,
+        }
+        meta_file = case_dir / "case_meta.json"
+        if meta_file.exists():
+            try:
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    details["metadata"] = json.load(f)
+            except Exception:
+                pass
+        val_file = case_dir / "validated" / "validation_report.json"
+        if val_file.exists():
+            try:
+                with open(val_file, "r", encoding="utf-8") as f:
+                    details["validation_report"] = json.load(f)
+            except Exception:
+                pass
+        reports_dir = case_dir / "reports"
+        if reports_dir.exists():
+            for rf in reports_dir.iterdir():
+                if rf.suffix.lower() == ".json":
+                    details["reports"]["json"] = str(rf.name)
+                elif rf.suffix.lower() == ".csv":
+                    details["reports"]["csv"] = str(rf.name)
+                elif rf.suffix.lower() == ".html":
+                    details["reports"]["html"] = str(rf.name)
+        return jsonify({"status": "SUCCESS", "case": details}), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.post("/api/faris/folder/resolve-scope")
+def api_faris_folder_resolve_scope():
+    try:
+        api = _get_faris_api()
+        body = request.get_json(silent=True) or {}
+        folder_path = str(body.get("folder_path") or body.get("path") or "").strip()
+        target_device = body.get("target_device") or body.get("target")
+        if not folder_path:
+            return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+        scope_result = api.resolve_folder_scope(folder_path, target_device=target_device)
+        return jsonify(scope_result), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.post("/api/faris/folder/recover")
+def api_faris_folder_recover():
+    try:
+        api = _get_faris_api()
+        body = request.get_json(silent=True) or {}
+        case_id = str(body.get("case_id") or "").strip()
+        if not case_id:
+            case_id = f"FARIS-FLD-{_uuid.uuid4().hex[:8].upper()}"
+            body["case_id"] = case_id
+        folder_path = str(body.get("folder_path") or body.get("target_path") or "").strip()
+        if not folder_path:
+            return jsonify({"status": "ERROR", "message": "Missing 'folder_path' parameter"}), 400
+        job_id = f"JOB-FLD-{_uuid.uuid4().hex[:8].upper()}"
+        job_entry = {
+            "job_id": job_id,
+            "case_id": case_id,
+            "scope": "FOLDER",
+            "folder_path": folder_path,
+            "status": "RUNNING",
+            "progress_pct": 0.0,
+            "current_stage": "setup",
+            "stage_status": "RUNNING",
+            "logs": [],
+            "stages": {
+                "setup": {"label": "Workspace Initialization", "status": "PENDING", "pct": 5.0},
+                "scope_resolution": {"label": "Scope & Allocation Mapping", "status": "PENDING", "pct": 15.0},
+                "fs_recovery": {"label": "Pass 1: Filesystem Structure Extraction", "status": "PENDING", "pct": 30.0},
+                "carving": {"label": "Pass 2: Scoped Forensic Carving", "status": "PENDING", "pct": 60.0},
+                "validation": {"label": "Integrity & Confidence Validation", "status": "PENDING", "pct": 80.0},
+                "hashing": {"label": "SHA-256 Manifest Hashing", "status": "PENDING", "pct": 88.0},
+                "reporting": {"label": "Multi-Format Forensic Reporting", "status": "PENDING", "pct": 95.0},
+            },
+            "result": None,
+            "error": None,
+            "start_time": time.time(),
+            "end_time": None,
+        }
+        with _faris_jobs_lock:
+            _faris_jobs[job_id] = job_entry
+
+        def _folder_progress_cb(stage_id: str, status: str, pct: float, msg: str):
+            with _faris_jobs_lock:
+                if job_id in _faris_jobs:
+                    j = _faris_jobs[job_id]
+                    j["progress_pct"] = float(pct)
+                    j["current_stage"] = stage_id
+                    j["stage_status"] = status
+                    j["logs"].append({
+                        "timestamp": time.strftime("%H:%M:%S", time.localtime()),
+                        "stage": stage_id,
+                        "status": status,
+                        "pct": pct,
+                        "message": msg
+                    })
+                    if stage_id in j["stages"]:
+                        j["stages"][stage_id]["status"] = status
+                        j["stages"][stage_id]["pct"] = pct
+
+        def _folder_worker():
+            try:
+                result = api.recover_folder(body, progress_callback=_folder_progress_cb)
+                with _faris_jobs_lock:
+                    if job_id in _faris_jobs:
+                        j = _faris_jobs[job_id]
+                        j["status"] = result.get("status", "SUCCESS")
+                        j["result"] = result
+                        j["end_time"] = time.time()
+                        if result.get("status") == "FAILED":
+                            j["error"] = result.get("error", "Folder recovery pipeline failed.")
+            except Exception as e:
+                with _faris_jobs_lock:
+                    if job_id in _faris_jobs:
+                        j = _faris_jobs[job_id]
+                        j["status"] = "FAILED"
+                        j["error"] = str(e)
+                        j["end_time"] = time.time()
+
+        thread = _faris_threading.Thread(target=_folder_worker, daemon=True)
+        thread.start()
+
+        return jsonify({
+            "status": "SUCCESS",
+            "job_id": job_id,
+            "case_id": case_id,
+            "scope": "FOLDER",
+            "message": "FARIS folder recovery pipeline started"
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+@app.get("/api/faris/folder/jobs/<job_id>")
+def api_faris_folder_job_status(job_id: str):
+    with _faris_jobs_lock:
+        job = _faris_jobs.get(job_id)
+        if not job:
+            return jsonify({"status": "ERROR", "message": f"Job ID '{job_id}' not found"}), 404
+        return jsonify(job), 200
+
 
 # ---------------------------------------------------------------------------
 # API: Phase 9 Post-Sanitization Residual Evidence Assessment Endpoints
@@ -694,14 +1002,29 @@ def get_assessment_status(assessment_id):
     if not session:
         return jsonify({"status": "error", "message": "Assessment session not found."}), 404
 
+    elapsed = max(0.001, time.time() - session.start_time)
+    mb_scanned = session.bytes_scanned / (1024 * 1024)
+    scan_rate = round(mb_scanned / elapsed, 2)
+    rem_bytes = max(0, session.total_bytes - session.bytes_scanned)
+    bytes_per_s = session.bytes_scanned / elapsed
+    eta = round(rem_bytes / max(1.0, bytes_per_s), 1) if bytes_per_s > 0 else 0.0
+    curr_lba = session.sectors_scanned
+
     return jsonify({
         "assessment_id": session.assessment_id,
         "status": session.status,
+        "is_cancelled": session.is_cancelled,
         "progress_pct": session.progress_pct,
         "bytes_scanned": session.bytes_scanned,
         "total_bytes": session.total_bytes,
         "sectors_scanned": session.sectors_scanned,
         "total_sectors": session.total_sectors,
+        "current_lba": curr_lba,
+        "scan_rate_mb_s": scan_rate,
+        "elapsed_seconds": round(elapsed, 1),
+        "eta_seconds": eta,
+        "current_region": f"LBA {curr_lba:,} / {session.total_sectors:,}",
+        "matches_count": len(session.validated_candidates) + len(session.partial_artifacts) + len(session.anomalies),
         "validated_count": len(session.validated_candidates),
         "partial_count": len(session.partial_artifacts),
         "anomaly_count": len(session.anomalies),
@@ -710,6 +1033,24 @@ def get_assessment_status(assessment_id):
         "observation_statement": session.observation_statement,
         "logs": session.logs[-20:],
     }), 200
+
+
+@app.post("/api/assessment/cancel")
+def post_assessment_cancel():
+    """Cancel an ongoing post-sanitization assessment session."""
+    try:
+        from post_sanitization_assessment import cancel_assessment_session
+        body = request.get_json(silent=True) or {}
+        assessment_id = body.get("assessment_id", "")
+        if not assessment_id:
+            return jsonify({"status": "error", "message": "assessment_id is required."}), 400
+        success = cancel_assessment_session(assessment_id)
+        if success:
+            return jsonify({"status": "SUCCESS", "message": f"Assessment {assessment_id} cancelled."}), 200
+        else:
+            return jsonify({"status": "NOT_FOUND", "message": "Assessment session not found or already finished."}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.get("/api/assessment/report/<assessment_id>")

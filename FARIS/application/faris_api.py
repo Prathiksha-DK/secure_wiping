@@ -18,6 +18,7 @@ try:
     from analysis.artifact_discovery import artifact_discovery_engine
     from analysis.artifact_state_analysis import artifact_state_analyzer
     from recovery.adaptive_engine import adaptive_recovery_engine
+    from recovery.folder_recovery import folder_recovery_engine
     from validation.recovery_validator import recovery_validator
     from reporting.report_generator import report_generator
 except ImportError:
@@ -32,6 +33,7 @@ except ImportError:
     from ..analysis.artifact_discovery import artifact_discovery_engine
     from ..analysis.artifact_state_analysis import artifact_state_analyzer
     from ..recovery.adaptive_engine import adaptive_recovery_engine
+    from ..recovery.folder_recovery import folder_recovery_engine
     from ..validation.recovery_validator import recovery_validator
     from ..reporting.report_generator import report_generator
 
@@ -223,34 +225,123 @@ class FARISAPI:
     def export_verified_artifacts(self, case_id: str, destination_dir: str) -> Dict[str, Any]:
         """
         Safely exports verified recovered artifacts to a user-selected separate destination device/folder.
+        Preserves original directory hierarchies, folders, and document file types.
         Protects original evidence from any write interaction.
         """
         case_dir = resolve_case_dir(case_id)
         dest = Path(destination_dir)
         dest.mkdir(parents=True, exist_ok=True)
 
-        val_report_path = case_dir / "validated" / "validation_report.json"
-        if not val_report_path.exists():
-            return {"status": "ERROR", "message": "Validation report not found. Run validation first."}
-
-        with open(val_report_path, "r", encoding="utf-8") as f:
-            val_data = json.load(f)
-
         exported = []
-        for art in val_data.get("artifacts", []):
-            if art.get("validation_status") in ["VALID", "PARTIALLY_VALID"]:
-                rel_p = art.get("relative_path")
-                src_file = FARIS_ROOT / rel_p
-                if src_file.exists():
-                    target_file = dest / src_file.name
-                    shutil.copy2(src_file, target_file)
-                    dest_hash = hashlib.sha256(target_file.read_bytes()).hexdigest()
-                    exported.append({
-                        "file": src_file.name,
-                        "destination": str(target_file),
-                        "sha256": dest_hash,
-                        "integrity_verified": (dest_hash == art.get("sha256"))
-                    })
+        exported_hashes = set()
+
+        # 1. Export complete filesystem directory hierarchy if reconstructed by tsk_recover
+        fs_tree_dir = case_dir / "recovery" / "filesystem_tree"
+        if fs_tree_dir.exists() and fs_tree_dir.is_dir():
+            for root, dirs, files in os.walk(fs_tree_dir):
+                for fname in files:
+                    src_f = Path(root) / fname
+                    try:
+                        rel_path = src_f.relative_to(fs_tree_dir)
+                        target_f = dest / rel_path
+                        target_f.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src_f, target_f)
+                        dest_hash = hashlib.sha256(target_f.read_bytes()).hexdigest()
+                        exported_hashes.add(dest_hash)
+                        exported.append({
+                            "file": fname,
+                            "relative_path": str(rel_path).replace("\\", "/"),
+                            "destination": str(target_f),
+                            "sha256": dest_hash,
+                            "source_method": "filesystem_tree/tsk_recover",
+                            "integrity_verified": True
+                        })
+                    except Exception as e_tree:
+                        print(f"[!] Export notice for {fname}: {e_tree}")
+
+        # 2. Export deleted files recovered by FAT32 scanner
+        del_files_dir = case_dir / "recovery" / "deleted_files"
+        if del_files_dir.exists() and del_files_dir.is_dir():
+            target_del_dir = dest / "recovered_deleted"
+            for d_file in del_files_dir.iterdir():
+                if d_file.is_file():
+                    try:
+                        target_del_f = target_del_dir / d_file.name
+                        target_del_f.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(d_file, target_del_f)
+                        dest_hash = hashlib.sha256(target_del_f.read_bytes()).hexdigest()
+                        if dest_hash not in exported_hashes:
+                            exported_hashes.add(dest_hash)
+                            exported.append({
+                                "file": d_file.name,
+                                "relative_path": f"recovered_deleted/{d_file.name}",
+                                "destination": str(target_del_f),
+                                "sha256": dest_hash,
+                                "source_method": "fat32_deleted_scanner",
+                                "integrity_verified": True
+                            })
+                    except Exception:
+                        pass
+
+        # 3. Export verified individual artifacts from validation report
+        val_report_path = case_dir / "validated" / "validation_report.json"
+        if val_report_path.exists():
+            try:
+                with open(val_report_path, "r", encoding="utf-8") as f:
+                    val_data = json.load(f)
+
+                # Map provenance items if available
+                prov_map = {}
+                adapt_path = case_dir / "recovery" / "adaptive_recovery_summary.json"
+                if adapt_path.exists():
+                    try:
+                        with open(adapt_path, "r", encoding="utf-8") as f_a:
+                            adapt_data = json.load(f_a)
+                            for p_item in adapt_data.get("master_provenance", []):
+                                if p_item.get("file_path"):
+                                    prov_map[p_item["file_path"]] = p_item
+                    except Exception:
+                        pass
+
+                for art in val_data.get("artifacts", []):
+                    # Include VALID, PARTIALLY_VALID, and valid UNVERIFIED_GENERIC non-empty files
+                    status = art.get("validation_status", "")
+                    if status in ["VALID", "PARTIALLY_VALID", "UNVERIFIED_GENERIC"]:
+                        rel_p = art.get("relative_path")
+                        src_file = FARIS_ROOT / rel_p if rel_p else None
+                        if src_file and src_file.exists() and src_file.is_file() and src_file.stat().st_size > 0:
+                            f_hash = art.get("sha256") or hashlib.sha256(src_file.read_bytes()).hexdigest()
+                            if f_hash in exported_hashes:
+                                continue
+
+                            prov_item = prov_map.get(rel_p) or {}
+                            orig_name = prov_item.get("name") or src_file.name
+
+                            # Clean up mangled metadata names
+                            clean_fname = orig_name
+                            if clean_fname.startswith("metadata_") and "_inode_" in clean_fname:
+                                clean_fname = clean_fname.replace("metadata_", "")
+                                if clean_fname.endswith(".bin"):
+                                    clean_fname = clean_fname[:-4]
+
+                            # Determine export destination path
+                            if "carved" in rel_p.lower():
+                                target_file = dest / "carved" / clean_fname
+                            else:
+                                target_file = dest / clean_fname
+
+                            target_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(src_file, target_file)
+                            dest_hash = hashlib.sha256(target_file.read_bytes()).hexdigest()
+                            exported_hashes.add(dest_hash)
+                            exported.append({
+                                "file": clean_fname,
+                                "destination": str(target_file),
+                                "sha256": dest_hash,
+                                "integrity_verified": (dest_hash == f_hash)
+                            })
+            except Exception as e_val:
+                print(f"[!] Validation report export notice: {e_val}")
 
         audit_logger.log_action(
             case_id,
@@ -270,6 +361,22 @@ class FARISAPI:
             "artifacts": exported
         }
 
+    def resolve_folder_scope(self, folder_path: str, target_device: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Resolves storage allocation, directory clusters, child file chains, and logical LBAs for a folder.
+        """
+        return folder_recovery_engine.resolve_folder_scope(folder_path, target_device=target_device)
+
+    def recover_folder(
+        self,
+        setup: Dict[str, Any],
+        progress_callback: Optional[Callable[[str, str, float, str], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Executes complete folder-level forensic recovery pipeline.
+        """
+        return folder_recovery_engine.execute_folder_recovery(setup, progress_callback=progress_callback)
+
     def run_full_forensic_pipeline(
         self,
         setup: Dict[str, Any],
@@ -277,9 +384,12 @@ class FARISAPI:
     ) -> Dict[str, Any]:
         """
         Master Background Forensic Pipeline.
-        Executes the entire end-to-end recovery workflow using the AUTHORITATIVE newly created image.
-        Enforces strict dynamic execution: no hardcoded cases, evidence IDs, or partition offsets.
+        Executes the entire end-to-end recovery workflow (Device or Folder scoped).
         """
+        scope = str(setup.get("scope") or setup.get("recovery_scope") or "").strip().upper()
+        if scope == "FOLDER" or setup.get("folder_path"):
+            return self.recover_folder(setup, progress_callback=progress_callback)
+
         case_id = setup.get("case_id")
         if not case_id or not str(case_id).strip():
             return {

@@ -1,0 +1,11 @@
+{
+  "case_id": "test_fld_1788632487035_hash",
+  "case_name": "Folder Recovery: HashTest",
+  "created_at": "2026-09-05T18:21:27.044288+00:00",
+  "operator": "Hash Verifier",
+  "evidence": [],
+  "analysis_history": [],
+  "recovery_history": [],
+  "validation_history": [],
+  "report_history": []
+}

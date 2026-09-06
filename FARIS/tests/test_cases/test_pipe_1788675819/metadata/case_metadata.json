@@ -1,0 +1,19 @@
+{
+  "case_id": "test_pipe_1788675819",
+  "case_name": "Integration Test Raw Image",
+  "created_at": "2026-09-06T06:23:39.251769+00:00",
+  "operator": "Automated Tester",
+  "evidence": [
+    {
+      "evidence_id": "EVID_test_svc_evidence",
+      "evidence_type": "Disk Image",
+      "path": "test_svc_evidence.raw",
+      "exists": true,
+      "size_bytes": 1048576
+    }
+  ],
+  "analysis_history": [],
+  "recovery_history": [],
+  "validation_history": [],
+  "report_history": []
+}

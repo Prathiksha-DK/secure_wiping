@@ -116,6 +116,7 @@ class PostSanitizationAssessmentSession:
         self.start_time = time.time()
         self.end_time: Optional[float] = None
         self.status = "INITIALIZING"  # INITIALIZING, SCANNING, COMPLETED, CANCELLED, ERROR
+        self.is_cancelled = False
         self.progress_pct = 0.0
         self.bytes_scanned = 0
         self.sectors_scanned = 0
@@ -403,7 +404,7 @@ def stream_post_sanitization_assessment(
             seen_offsets = set()
 
             while offset < total_bytes:
-                if cancel_check and cancel_check():
+                if (cancel_check and cancel_check()) or session.is_cancelled:
                     session.status = "CANCELLED"
                     session.add_log("Scan cancelled by operator.")
                     break
@@ -536,6 +537,13 @@ def stream_post_sanitization_assessment(
                     session.progress_pct = round((session.bytes_scanned / total_bytes) * 100.0, 1)
 
                 if progress_cb and total_bytes > 0:
+                    elapsed = max(0.001, time.time() - session.start_time)
+                    mb_scanned = session.bytes_scanned / (1024 * 1024)
+                    scan_rate = round(mb_scanned / elapsed, 2)
+                    rem_bytes = max(0, total_bytes - session.bytes_scanned)
+                    bytes_per_s = session.bytes_scanned / elapsed
+                    eta = round(rem_bytes / max(1.0, bytes_per_s), 1) if bytes_per_s > 0 else 0.0
+                    curr_lba = offset // session.sector_size
                     progress_cb({
                         "assessment_id": session.assessment_id,
                         "bytes_scanned": session.bytes_scanned,
@@ -543,6 +551,12 @@ def stream_post_sanitization_assessment(
                         "sectors_scanned": session.sectors_scanned,
                         "total_sectors": session.total_sectors,
                         "progress_pct": session.progress_pct,
+                        "current_lba": curr_lba,
+                        "scan_rate_mb_s": scan_rate,
+                        "elapsed_seconds": round(elapsed, 1),
+                        "eta_seconds": eta,
+                        "current_region": f"LBA {curr_lba:,} / {session.total_sectors:,}",
+                        "matches_count": len(session.validated_candidates) + len(session.partial_artifacts) + len(session.anomalies),
                         "validated_count": len(session.validated_candidates),
                         "partial_count": len(session.partial_artifacts),
                         "anomaly_count": len(session.anomalies),
@@ -1106,3 +1120,22 @@ def sync_assessment_fragments_to_swarm(assessment_id: str, case_id: str = "CASE-
         "fragments_count": len(fragment_candidates),
         "tasks_created": tasks_spawned,
     }
+
+
+def cancel_assessment_session(assessment_id: str) -> bool:
+    """Safely and cooperatively cancel an active post-sanitization assessment session."""
+    with _assessment_lock:
+        session = _assessment_sessions.get(assessment_id)
+        if session:
+            session.is_cancelled = True
+            session.status = "CANCELLED"
+            session.add_log("Assessment session cancellation requested.")
+            return True
+    return False
+
+
+def get_active_assessment_session(assessment_id: str) -> Optional[PostSanitizationAssessmentSession]:
+    """Retrieve active assessment session by ID."""
+    with _assessment_lock:
+        return _assessment_sessions.get(assessment_id)
+

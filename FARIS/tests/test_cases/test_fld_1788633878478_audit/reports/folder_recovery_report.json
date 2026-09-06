@@ -1,0 +1,99 @@
+{
+  "faris_version": "1.0.0",
+  "engine": "FARIS Folder-Level Forensic Recovery Engine",
+  "report_generated_at": "2026-09-05T18:44:38.528054+00:00",
+  "case_id": "test_fld_1788633878478_audit",
+  "examiner": "Auditor",
+  "scope": "FOLDER",
+  "source_folder": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpmbc1u04d\\AuditTest",
+  "scope_info": {
+    "status": "SUCCESS",
+    "is_allocation_available": true,
+    "scope_type": "FOLDER",
+    "folder_name": "AuditTest",
+    "full_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpmbc1u04d\\AuditTest",
+    "filesystem": "Filesystem Managed",
+    "device_path": "",
+    "partition_start_lba": null,
+    "bytes_per_sector": 512,
+    "sectors_per_cluster": 8,
+    "directory_allocation": {
+      "starting_cluster": null,
+      "cluster_chain_list": [],
+      "cluster_chain": "Unavailable (OS Managed)",
+      "sectors_occupied": 0,
+      "clusters_occupied": 0,
+      "bytes_occupied": 0,
+      "extents": [],
+      "starting_lba": null,
+      "ending_lba": null,
+      "byte_offset": null,
+      "byte_offset_hex": "Unavailable"
+    },
+    "child_files": [
+      {
+        "name": "audit.log",
+        "relative_path": "audit.log",
+        "full_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpmbc1u04d\\AuditTest\\audit.log",
+        "is_dir": false,
+        "size": 16,
+        "starting_cluster": null,
+        "cluster_chain": "OS Managed",
+        "cluster_chain_list": [],
+        "starting_lba": null,
+        "ending_lba": null,
+        "byte_offset": null,
+        "byte_offset_hex": "Unavailable",
+        "sectors_occupied": 1,
+        "clusters_occupied": 1,
+        "allocated_sectors": 1,
+        "allocated_clusters": 1,
+        "extents": [],
+        "is_fragmented": false
+      }
+    ],
+    "child_files_count": 1,
+    "child_files_total_bytes": 16,
+    "child_files_total_sectors": 1,
+    "child_files_total_clusters": 1,
+    "combined_storage_map": {
+      "starting_lba": null,
+      "ending_lba": null,
+      "total_sectors": 1,
+      "total_clusters": 1,
+      "total_bytes": 16,
+      "extents_count": 0,
+      "extents": [],
+      "is_fragmented": false
+    },
+    "mapping_layer": "Filesystem Driver Layer",
+    "allocation_disclaimer": "Standard filesystem enumeration. Direct block-level LBA mapping abstracted.",
+    "resolved_at": "2026-09-05T18:44:38.494535+00:00"
+  },
+  "destination_root": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmple06nuci\\test_fld_1788633878478_audit\\recovery\\folder\\AuditTest",
+  "summary": {
+    "total_items": 1,
+    "pass1_fs_recovered": 1,
+    "pass2_carved": 0,
+    "total_bytes_recovered": 16
+  },
+  "recovered_artifacts": [
+    {
+      "name": "audit.log",
+      "relative_path": "audit.log",
+      "destination_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmple06nuci\\test_fld_1788633878478_audit\\recovery\\folder\\AuditTest\\audit.log",
+      "status": "RECOVERED",
+      "size_bytes": 16,
+      "sha256": "c1f62252892c3fc59601375b5536d158a36f6ce08a21df01e4d73dc51c4152fe",
+      "starting_cluster": null,
+      "cluster_chain": "OS Managed",
+      "starting_lba": null,
+      "ending_lba": null,
+      "allocated_sectors": 1,
+      "allocated_clusters": 1,
+      "extents": [],
+      "integrity_verified": true,
+      "recovery_source": "Pass 1 (Filesystem Allocation)"
+    }
+  ]
+}

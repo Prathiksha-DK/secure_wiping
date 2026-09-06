@@ -266,17 +266,26 @@ class RecoveryValidator:
                     "sha256": sha256
                 }
 
-        # 5. ZIP / Office XML Validation
+        # 5. ZIP / Office XML Validation (.zip, .docx, .xlsx, .pptx, .jar)
         if ext in [".zip", ".docx", ".xlsx", ".pptx", ".jar"] or header_sample.startswith(b"PK\x03\x04"):
             try:
                 with zipfile.ZipFile(file_path, "r") as zf:
                     bad_file = zf.testzip()
                     if bad_file is None:
+                        doc_type = "Office Open XML Document / ZIP Archive"
+                        file_names = zf.namelist()
+                        if any(n.startswith("word/") for n in file_names):
+                            doc_type = "Microsoft Word Document (.docx)"
+                        elif any(n.startswith("xl/") for n in file_names):
+                            doc_type = "Microsoft Excel Spreadsheet (.xlsx)"
+                        elif any(n.startswith("ppt/") for n in file_names):
+                            doc_type = "Microsoft PowerPoint Presentation (.pptx)"
+
                         return {
                             "file": file_path.name,
                             "validation_status": "VALID",
                             "confidence": "HIGH",
-                            "reason": f"ZIP archive verified; {len(zf.infolist())} entries parsed without CRC errors.",
+                            "reason": f"{doc_type} verified; {len(zf.infolist())} entries parsed without CRC errors.",
                             "size_bytes": size,
                             "sha256": sha256
                         }
@@ -290,19 +299,21 @@ class RecoveryValidator:
                             "sha256": sha256
                         }
             except Exception as e:
-                return {
-                    "file": file_path.name,
-                    "validation_status": "DAMAGED",
-                    "confidence": "LOW",
-                    "reason": f"ZIP central directory parsing failed: {str(e)}",
-                    "size_bytes": size,
-                    "sha256": sha256
-                }
+                # If zip parser failed but starts with PK\x03\x04, mark PARTIALLY_VALID
+                if header_sample.startswith(b"PK\x03\x04"):
+                    return {
+                        "file": file_path.name,
+                        "validation_status": "PARTIALLY_VALID",
+                        "confidence": "MEDIUM",
+                        "reason": f"ZIP header verified, central directory parsing partial: {str(e)}",
+                        "size_bytes": size,
+                        "sha256": sha256
+                    }
 
         # 6. PDF Validation
         if ext == ".pdf" or header_sample.startswith(b"%PDF-"):
             has_hdr = header_sample.startswith(b"%PDF-")
-            has_eof = b"%%EOF" in full_data[-1024:]
+            has_eof = b"%%EOF" in full_data[-2048:] or b"%%EOF" in full_data
             if has_hdr and has_eof:
                 return {
                     "file": file_path.name,
@@ -318,6 +329,96 @@ class RecoveryValidator:
                     "validation_status": "PARTIALLY_VALID",
                     "confidence": "MEDIUM",
                     "reason": "PDF header verified, but trailing %%EOF footer missing.",
+                    "size_bytes": size,
+                    "sha256": sha256
+                }
+
+        # 7. Legacy Office OLE / Compound Binary (.doc, .xls, .ppt, .ole)
+        if ext in [".doc", ".xls", ".ppt", ".ole", ".msg"] or header_sample.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
+            if header_sample.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
+                ole_type = "Microsoft OLE Compound Binary Document"
+                if b"WordDocument" in full_data:
+                    ole_type = "Legacy Microsoft Word Document (.doc)"
+                elif b"Workbook" in full_data or b"Book" in full_data:
+                    ole_type = "Legacy Microsoft Excel Spreadsheet (.xls)"
+                elif b"PowerPoint Document" in full_data:
+                    ole_type = "Legacy Microsoft PowerPoint (.ppt)"
+
+                return {
+                    "file": file_path.name,
+                    "validation_status": "VALID",
+                    "confidence": "HIGH",
+                    "reason": f"{ole_type} magic signature (0xD0CF11E0) verified.",
+                    "size_bytes": size,
+                    "sha256": sha256
+                }
+
+        # 8. Rich Text Format (RTF)
+        if ext == ".rtf" or header_sample.startswith(b"{\\rtf1"):
+            if header_sample.startswith(b"{\\rtf1"):
+                return {
+                    "file": file_path.name,
+                    "validation_status": "VALID",
+                    "confidence": "HIGH",
+                    "reason": "Rich Text Format (RTF) header syntax confirmed.",
+                    "size_bytes": size,
+                    "sha256": sha256
+                }
+
+        # 9. 7-Zip & RAR Archives
+        if ext == ".7z" or header_sample.startswith(b"7z\xbc\xaf'\x1c"):
+            if header_sample.startswith(b"7z\xbc\xaf'\x1c"):
+                return {
+                    "file": file_path.name,
+                    "validation_status": "VALID",
+                    "confidence": "HIGH",
+                    "reason": "7-Zip archive signature verified.",
+                    "size_bytes": size,
+                    "sha256": sha256
+                }
+
+        if ext == ".rar" or header_sample.startswith(b"Rar!\x1a\x07"):
+            if header_sample.startswith(b"Rar!\x1a\x07"):
+                return {
+                    "file": file_path.name,
+                    "validation_status": "VALID",
+                    "confidence": "HIGH",
+                    "reason": "RAR archive signature verified.",
+                    "size_bytes": size,
+                    "sha256": sha256
+                }
+
+        # 10. Plain Text, Code, and Structured Documents (.txt, .csv, .json, .xml, .py, .md, .log, .sql, .html)
+        text_exts = [".txt", ".csv", ".json", ".xml", ".py", ".md", ".log", ".sql", ".html", ".css", ".js", ".ini", ".inf", ".bat", ".sh", ".cfg", ".conf", ".yaml", ".yml"]
+        if ext in text_exts or (len(full_data) > 0 and len(full_data) <= 10 * 1024 * 1024):
+            printable_count = sum(1 for b in full_data if 32 <= b <= 126 or b in (9, 10, 13))
+            ratio = printable_count / len(full_data)
+            if ratio >= 0.80:
+                try:
+                    full_data.decode("utf-8")
+                    return {
+                        "file": file_path.name,
+                        "validation_status": "VALID",
+                        "confidence": "HIGH",
+                        "reason": f"Plaintext/Structured document verified (UTF-8, {ratio*100:.1f}% printable).",
+                        "size_bytes": size,
+                        "sha256": sha256
+                    }
+                except UnicodeDecodeError:
+                    return {
+                        "file": file_path.name,
+                        "validation_status": "VALID",
+                        "confidence": "HIGH",
+                        "reason": f"Plaintext document verified (ASCII/ANSI, {ratio*100:.1f}% printable).",
+                        "size_bytes": size,
+                        "sha256": sha256
+                    }
+            elif ext in text_exts and ratio >= 0.50:
+                return {
+                    "file": file_path.name,
+                    "validation_status": "PARTIALLY_VALID",
+                    "confidence": "MEDIUM",
+                    "reason": f"Partial plaintext structure detected ({ratio*100:.1f}% printable).",
                     "size_bytes": size,
                     "sha256": sha256
                 }

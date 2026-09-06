@@ -1,0 +1,36 @@
+{
+  "case_id": "test_fld_1788635226116_del1b",
+  "scope": "FOLDER",
+  "folder_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmp14g7rlx2\\LiveFolder",
+  "total_items": 1,
+  "valid_items": 1,
+  "pass1_fs_items": 1,
+  "pass2_carved_items": 0,
+  "validation_timestamp": "2026-09-05T19:07:06.166653+00:00",
+  "items": [
+    {
+      "name": "active1.txt",
+      "relative_path": "active1.txt",
+      "destination_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpom79zyyt\\test_fld_1788635226116_del1b\\recovery\\folder\\LiveFolder\\active1.txt",
+      "status": "RECOVERED",
+      "state": "ACTIVE",
+      "size_bytes": 21,
+      "sha256": "67669ba92c41ba71c10da616d8ec72c675938b6cc47824642152fbb054794d25",
+      "starting_cluster": null,
+      "cluster_chain": "OS Managed",
+      "starting_lba": null,
+      "ending_lba": null,
+      "allocated_sectors": 1,
+      "allocated_clusters": 1,
+      "extents": [],
+      "integrity_verified": true,
+      "validation": "VALID (UTF-8 Plaintext Structure Intact)",
+      "confidence": "HIGH",
+      "recovery_source": "Pass 1A (Active Filesystem)",
+      "recovery_method": "Active Filesystem Allocation",
+      "directory_cluster": null,
+      "directory_entry_lba": null,
+      "directory_entry_byte_offset_hex": null
+    }
+  ]
+}

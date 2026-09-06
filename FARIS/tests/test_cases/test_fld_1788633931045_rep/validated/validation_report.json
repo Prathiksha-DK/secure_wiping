@@ -1,0 +1,29 @@
+{
+  "case_id": "test_fld_1788633931045_rep",
+  "scope": "FOLDER",
+  "folder_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmp3mnsrd00\\ReportTest",
+  "total_items": 1,
+  "valid_items": 1,
+  "pass1_fs_items": 1,
+  "pass2_carved_items": 0,
+  "validation_timestamp": "2026-09-05T18:45:31.080049+00:00",
+  "items": [
+    {
+      "name": "data.csv",
+      "relative_path": "data.csv",
+      "destination_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpsb_1cl6l\\test_fld_1788633931045_rep\\recovery\\folder\\ReportTest\\data.csv",
+      "status": "RECOVERED",
+      "size_bytes": 20,
+      "sha256": "e05776ee7b66bd95e116682dba8be14337fc3f40ebea15028d72b275aee795d9",
+      "starting_cluster": null,
+      "cluster_chain": "OS Managed",
+      "starting_lba": null,
+      "ending_lba": null,
+      "allocated_sectors": 1,
+      "allocated_clusters": 1,
+      "extents": [],
+      "integrity_verified": true,
+      "recovery_source": "Pass 1 (Filesystem Allocation)"
+    }
+  ]
+}

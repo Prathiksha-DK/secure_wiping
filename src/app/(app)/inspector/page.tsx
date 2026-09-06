@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -42,6 +42,11 @@ import {
   Copy,
   Check,
   ExternalLink,
+  ChevronRight,
+  Grid,
+  ListFilter,
+  CornerDownRight,
+  List,
 } from "lucide-react";
 import {
   Dialog,
@@ -82,6 +87,49 @@ interface SectorAnalysis {
     match_percentage: number;
     statement: string;
   };
+}
+
+interface ExtentInfo {
+  extent_index?: number;
+  start_cluster: number;
+  end_cluster: number;
+  cluster_count: number;
+  start_lba: number;
+  end_lba: number;
+  sector_count: number;
+  start_byte_offset: number;
+  end_byte_offset: number;
+  start_byte_offset_hex: string;
+  end_byte_offset_hex: string;
+  label?: string;
+}
+
+interface ModeMetadata {
+  mode: string;
+  file_path?: string;
+  folder_path?: string;
+  size?: number;
+  size_formatted?: string;
+  filesystem?: string;
+  device_path?: string;
+  associated_entity?: string;
+  associated_cluster?: number;
+  starting_cluster?: number;
+  total_sectors?: number;
+  total_clusters?: number;
+  total_extents?: number;
+  current_extent_index?: number;
+  current_relative_sector?: number;
+  is_fragmented?: boolean;
+  extents?: ExtentInfo[];
+  current_extent?: ExtentInfo;
+  sub_view?: string;
+  directory_allocation?: any;
+  child_files_summary?: any;
+  child_file_allocations?: any[];
+  combined_allocation?: any;
+  selected_child_file?: string;
+  selected_child_name?: string;
 }
 
 interface DeviceMetadata {
@@ -153,17 +201,29 @@ interface DeviceMetadata {
 }
 
 export default function StorageInspectorPage() {
+  // Target & Mode State
   const [target, setTarget] = useState<string>("");
+  const [viewerMode, setViewerMode] = useState<"device" | "file" | "folder">("device");
+  const [activeFileTarget, setActiveFileTarget] = useState<string>("");
+  const [activeFolderTarget, setActiveFolderTarget] = useState<string>("");
+  const [folderSubView, setFolderSubView] = useState<"directory" | "child_files" | "combined">("directory");
+  const [selectedChildFile, setSelectedChildFile] = useState<string>("");
+  const [extentIndex, setExtentIndex] = useState<number>(0);
+  const [relativeSector, setRelativeSector] = useState<number>(0);
+
+  // Sector Navigation State (Mode A)
   const [lba, setLba] = useState<number>(0);
   const [lbaInput, setLbaInput] = useState<string>("0");
   const [sectorSize, setSectorSize] = useState<number>(512);
   const [sectorCount, setSectorCount] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<string>("hex");
 
+  // Telemetry & Buffer State
   const [loading, setLoading] = useState<boolean>(false);
   const [hexData, setHexData] = useState<HexRow[]>([]);
   const [analysis, setAnalysis] = useState<SectorAnalysis | null>(null);
   const [currentSha256, setCurrentSha256] = useState<string>("");
+  const [modeMetadata, setModeMetadata] = useState<ModeMetadata | null>(null);
   const [metadata, setMetadata] = useState<DeviceMetadata | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -173,7 +233,7 @@ export default function StorageInspectorPage() {
   // Search State
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchType, setSearchType] = useState<string>("text");
-  const [searchMode, setSearchMode] = useState<string>("both"); // "both" | "filesystem" | "raw"
+  const [searchMode, setSearchMode] = useState<string>("both");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchSummary, setSearchSummary] = useState<any>(null);
   const [searching, setSearching] = useState<boolean>(false);
@@ -185,6 +245,9 @@ export default function StorageInspectorPage() {
   const [selectedDetails, setSelectedDetails] = useState<any>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Folder Allocation Modal / View State
+  const [folderAllocationDetails, setFolderAllocationDetails] = useState<any>(null);
+
   const copyToClipboard = (text: string, key: string) => {
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(text);
@@ -193,6 +256,387 @@ export default function StorageInspectorPage() {
     }
   };
 
+  // Fetch real connected physical devices on mount
+  useEffect(() => {
+    fetch("http://localhost:9758/api/devices")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setDevices(data);
+          const firstRealDev = data[0].devicePath || data[0].name;
+          setTarget(firstRealDev);
+          loadDeviceAndSector(firstRealDev, 0, 512, 1);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch device metadata
+  const fetchDeviceMetadata = async (targetPath: string) => {
+    if (!targetPath) return;
+    try {
+      const metaRes = await fetch("http://localhost:9758/api/inspector/device-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: targetPath }),
+      });
+      const metaData = await metaRes.json();
+      if (!metaData.error) {
+        setMetadata(metaData);
+      }
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  // Unified Hex Sector Loader supporting Mode A (Device) & Mode B (File/Folder)
+  const loadHexSector = useCallback(
+    async (opts?: {
+      mode?: "device" | "file" | "folder";
+      targetPath?: string;
+      lbaNum?: number;
+      secSize?: number;
+      count?: number;
+      subView?: "directory" | "child_files" | "combined";
+      childFile?: string;
+      extIdx?: number;
+      relSec?: number;
+      targetDev?: string;
+    }) => {
+      const modeToUse = opts?.mode || viewerMode;
+      const targetDev = opts?.targetDev || target;
+      const secSizeToUse = opts?.secSize || sectorSize;
+      const countToUse = opts?.count || sectorCount;
+
+      let effectiveTarget = "";
+      if (modeToUse === "device") {
+        effectiveTarget = opts?.targetPath || target;
+      } else if (modeToUse === "file") {
+        effectiveTarget = opts?.targetPath || activeFileTarget;
+      } else if (modeToUse === "folder") {
+        effectiveTarget = opts?.targetPath || activeFolderTarget;
+      }
+
+      if (!effectiveTarget && modeToUse === "device") {
+        effectiveTarget = target;
+      }
+
+      if (!effectiveTarget) {
+        setErrorMsg("Please specify a valid inspection target.");
+        return;
+      }
+
+      setLoading(true);
+      setErrorMsg("");
+
+      const effectiveLba = opts?.lbaNum !== undefined ? opts.lbaNum : lba;
+      const effectiveExtIdx = opts?.extIdx !== undefined ? opts.extIdx : extentIndex;
+      const effectiveRelSec = opts?.relSec !== undefined ? opts.relSec : relativeSector;
+      const effectiveSubView = opts?.subView || folderSubView;
+      const effectiveChildFile = opts?.childFile !== undefined ? opts.childFile : selectedChildFile;
+
+      try {
+        const payload: any = {
+          target: effectiveTarget,
+          mode: modeToUse,
+          sector_size: secSizeToUse,
+          sector_count: countToUse,
+          target_device: targetDev,
+        };
+
+        if (modeToUse === "device") {
+          payload.lba = effectiveLba;
+        } else if (modeToUse === "file") {
+          payload.extent_index = effectiveExtIdx;
+          payload.relative_sector = effectiveRelSec;
+        } else if (modeToUse === "folder") {
+          payload.sub_view = effectiveSubView;
+          payload.extent_index = effectiveExtIdx;
+          payload.relative_sector = effectiveRelSec;
+          if (effectiveSubView === "child_files" && effectiveChildFile) {
+            payload.child_file_path = effectiveChildFile;
+          }
+        }
+
+        const hexRes = await fetch("http://localhost:9758/api/inspector/read-hex", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const hexResp = await hexRes.json();
+
+        if (hexResp.error) {
+          setErrorMsg(hexResp.error);
+          setHexData([]);
+          setAnalysis(null);
+          setCurrentSha256("");
+        } else {
+          setHexData(hexResp.rows || []);
+          setAnalysis(hexResp.analysis || null);
+          setCurrentSha256(hexResp.sha256 || "");
+          setModeMetadata(hexResp.mode_metadata || null);
+
+          if (hexResp.lba !== undefined) {
+            setLba(hexResp.lba);
+            setLbaInput(hexResp.lba.toString());
+          }
+
+          if (modeToUse === "file") {
+            setViewerMode("file");
+            if (effectiveTarget) setActiveFileTarget(effectiveTarget);
+            setExtentIndex(effectiveExtIdx);
+            setRelativeSector(effectiveRelSec);
+          } else if (modeToUse === "folder") {
+            setViewerMode("folder");
+            if (effectiveTarget) setActiveFolderTarget(effectiveTarget);
+            setFolderSubView(effectiveSubView);
+            setExtentIndex(effectiveExtIdx);
+            setRelativeSector(effectiveRelSec);
+            if (effectiveChildFile) setSelectedChildFile(effectiveChildFile);
+          } else {
+            setViewerMode("device");
+          }
+        }
+      } catch (e: any) {
+        setErrorMsg(`Failed to connect to inspector backend: ${e.message}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      viewerMode,
+      target,
+      sectorSize,
+      sectorCount,
+      activeFileTarget,
+      activeFolderTarget,
+      lba,
+      extentIndex,
+      relativeSector,
+      folderSubView,
+      selectedChildFile,
+    ]
+  );
+
+  // Load device metadata and sector in Mode A
+  const loadDeviceAndSector = async (
+    targetPath: string = target,
+    sectorNum: number = lba,
+    secSize: number = sectorSize,
+    count: number = sectorCount
+  ) => {
+    if (!targetPath) return;
+    setViewerMode("device");
+    setTarget(targetPath);
+    await fetchDeviceMetadata(targetPath);
+    await loadHexSector({
+      mode: "device",
+      targetPath,
+      lbaNum: sectorNum,
+      secSize,
+      count,
+      targetDev: targetPath,
+    });
+  };
+
+  // Inspect specific File in Mode B
+  const inspectFileInHex = (filePath: string, devPath?: string) => {
+    if (!filePath) return;
+    const dev = devPath || target;
+    setActiveFileTarget(filePath);
+    setViewerMode("file");
+    setExtentIndex(0);
+    setRelativeSector(0);
+    setActiveTab("hex");
+    loadHexSector({
+      mode: "file",
+      targetPath: filePath,
+      extIdx: 0,
+      relSec: 0,
+      targetDev: dev,
+    });
+  };
+
+  // Inspect specific Folder in Mode B
+  const inspectFolderInHex = (
+    folderPath: string,
+    subView: "directory" | "child_files" | "combined" = "directory",
+    devPath?: string
+  ) => {
+    if (!folderPath) return;
+    const dev = devPath || target;
+    setActiveFolderTarget(folderPath);
+    setViewerMode("folder");
+    setFolderSubView(subView);
+    setExtentIndex(0);
+    setRelativeSector(0);
+    setActiveTab("hex");
+    loadHexSector({
+      mode: "folder",
+      targetPath: folderPath,
+      subView,
+      extIdx: 0,
+      relSec: 0,
+      targetDev: dev,
+    });
+  };
+
+  // Fetch Full Folder Allocation Map
+  const fetchFolderAllocation = async (folderPath: string) => {
+    if (!folderPath) return;
+    try {
+      const res = await fetch("http://localhost:9758/api/inspector/folder-allocation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder_path: folderPath, target_device: target }),
+      });
+      const data = await res.json();
+      setFolderAllocationDetails(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Jump handlers (Mode A)
+  const handleJumpLba = () => {
+    const parsed = parseInt(lbaInput, 10);
+    if (!isNaN(parsed) && parsed >= 0) {
+      loadHexSector({ mode: "device", lbaNum: parsed });
+    }
+  };
+
+  const handleNextSector = () => {
+    if (viewerMode === "device") {
+      const next = lba + sectorCount;
+      loadHexSector({ mode: "device", lbaNum: next });
+    } else {
+      const curExtSecCount = modeMetadata?.current_extent?.sector_count || 1;
+      const nextRelSec = relativeSector + 1;
+      const totalExts = modeMetadata?.total_extents || modeMetadata?.extents?.length || 1;
+
+      if (nextRelSec < curExtSecCount) {
+        loadHexSector({
+          mode: viewerMode,
+          relSec: nextRelSec,
+          extIdx: extentIndex,
+          subView: folderSubView,
+          childFile: selectedChildFile,
+        });
+      } else if (extentIndex < totalExts - 1) {
+        setExtentIndex(extentIndex + 1);
+        setRelativeSector(0);
+        loadHexSector({
+          mode: viewerMode,
+          relSec: 0,
+          extIdx: extentIndex + 1,
+          subView: folderSubView,
+          childFile: selectedChildFile,
+        });
+      }
+    }
+  };
+
+  const handlePrevSector = () => {
+    if (viewerMode === "device") {
+      const prev = Math.max(0, lba - sectorCount);
+      loadHexSector({ mode: "device", lbaNum: prev });
+    } else {
+      if (relativeSector > 0) {
+        const prevRelSec = relativeSector - 1;
+        loadHexSector({
+          mode: viewerMode,
+          relSec: prevRelSec,
+          extIdx: extentIndex,
+          subView: folderSubView,
+          childFile: selectedChildFile,
+        });
+      } else if (extentIndex > 0) {
+        const prevExtIdx = extentIndex - 1;
+        const prevExt = modeMetadata?.extents?.[prevExtIdx];
+        const prevSecCount = prevExt?.sector_count || 1;
+        setExtentIndex(prevExtIdx);
+        setRelativeSector(prevSecCount - 1);
+        loadHexSector({
+          mode: viewerMode,
+          relSec: prevSecCount - 1,
+          extIdx: prevExtIdx,
+          subView: folderSubView,
+          childFile: selectedChildFile,
+        });
+      }
+    }
+  };
+
+  const handlePageForward = () => {
+    if (viewerMode === "device") {
+      const next = lba + 16;
+      loadHexSector({ mode: "device", lbaNum: next });
+    } else {
+      const curExtSecCount = modeMetadata?.current_extent?.sector_count || 1;
+      const nextRelSec = Math.min(curExtSecCount - 1, relativeSector + 8);
+      loadHexSector({
+        mode: viewerMode,
+        relSec: nextRelSec,
+        extIdx: extentIndex,
+        subView: folderSubView,
+        childFile: selectedChildFile,
+      });
+    }
+  };
+
+  const handlePageBackward = () => {
+    if (viewerMode === "device") {
+      const prev = Math.max(0, lba - 16);
+      loadHexSector({ mode: "device", lbaNum: prev });
+    } else {
+      const prevRelSec = Math.max(0, relativeSector - 8);
+      loadHexSector({
+        mode: viewerMode,
+        relSec: prevRelSec,
+        extIdx: extentIndex,
+        subView: folderSubView,
+        childFile: selectedChildFile,
+      });
+    }
+  };
+
+  const handleJumpEnd = () => {
+    if (metadata && metadata.physical_identity.total_sectors > 0) {
+      const endLba = Math.max(0, metadata.physical_identity.total_sectors - 1);
+      loadHexSector({ mode: "device", lbaNum: endLba });
+    }
+  };
+
+  // Extent navigation handlers (Mode B)
+  const handleNextExtent = () => {
+    const totalExts = modeMetadata?.total_extents || modeMetadata?.extents?.length || 1;
+    if (extentIndex < totalExts - 1) {
+      const nextExt = extentIndex + 1;
+      setExtentIndex(nextExt);
+      setRelativeSector(0);
+      loadHexSector({
+        mode: viewerMode,
+        extIdx: nextExt,
+        relSec: 0,
+      });
+    }
+  };
+
+  const handlePrevExtent = () => {
+    if (extentIndex > 0) {
+      const prevExt = extentIndex - 1;
+      setExtentIndex(prevExt);
+      setRelativeSector(0);
+      loadHexSector({
+        mode: viewerMode,
+        extIdx: prevExt,
+        relSec: 0,
+      });
+    }
+  };
+
+  // Open Details Modal
   const handleOpenDetails = async (filePath: string) => {
     if (!filePath) return;
     setDetailsOpen(true);
@@ -240,112 +684,6 @@ export default function StorageInspectorPage() {
   const [beforeHex, setBeforeHex] = useState<string>("");
   const [afterHex, setAfterHex] = useState<string>("");
   const [diffResult, setDiffResult] = useState<any>(null);
-
-  // Fetch real connected physical devices on mount
-  useEffect(() => {
-    fetch("http://localhost:9758/api/devices")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setDevices(data);
-          const firstRealDev = data[0].devicePath || data[0].name;
-          setTarget(firstRealDev);
-          loadDeviceAndSector(firstRealDev, 0, sectorSize, sectorCount);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Fetch metadata and hex from backend
-  const loadDeviceAndSector = async (
-    targetPath: string = target,
-    sectorNum: number = lba,
-    secSize: number = sectorSize,
-    count: number = sectorCount
-  ) => {
-    if (!targetPath) return;
-    setLoading(true);
-    setErrorMsg("");
-
-    try {
-      // 1. Fetch Metadata
-      const metaRes = await fetch("http://localhost:9758/api/inspector/device-info", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: targetPath }),
-      });
-      const metaData = await metaRes.json();
-      if (metaData.error) {
-        setErrorMsg(metaData.error);
-      } else {
-        setMetadata(metaData);
-      }
-
-      // 2. Fetch Hex Sector
-      const hexRes = await fetch("http://localhost:9758/api/inspector/read-hex", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target: targetPath,
-          lba: sectorNum,
-          sector_size: secSize,
-          sector_count: count,
-        }),
-      });
-      const hexResp = await hexRes.json();
-      if (hexResp.error) {
-        setErrorMsg(hexResp.error);
-        setHexData([]);
-        setAnalysis(null);
-        setCurrentSha256("");
-      } else {
-        setHexData(hexResp.rows || []);
-        setAnalysis(hexResp.analysis || null);
-        setCurrentSha256(hexResp.sha256 || "");
-        setLba(sectorNum);
-        setLbaInput(sectorNum.toString());
-      }
-    } catch (e: any) {
-      setErrorMsg(`Failed to connect to inspector backend: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Jump handlers
-  const handleJumpLba = () => {
-    const parsed = parseInt(lbaInput, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
-      loadDeviceAndSector(target, parsed, sectorSize, sectorCount);
-    }
-  };
-
-  const handleNextSector = () => {
-    const next = lba + sectorCount;
-    loadDeviceAndSector(target, next, sectorSize, sectorCount);
-  };
-
-  const handlePrevSector = () => {
-    const prev = Math.max(0, lba - sectorCount);
-    loadDeviceAndSector(target, prev, sectorSize, sectorCount);
-  };
-
-  const handlePageForward = () => {
-    const next = lba + 16;
-    loadDeviceAndSector(target, next, sectorSize, sectorCount);
-  };
-
-  const handlePageBackward = () => {
-    const prev = Math.max(0, lba - 16);
-    loadDeviceAndSector(target, prev, sectorSize, sectorCount);
-  };
-
-  const handleJumpEnd = () => {
-    if (metadata && metadata.physical_identity.total_sectors > 0) {
-      const endLba = Math.max(0, metadata.physical_identity.total_sectors - 1);
-      loadDeviceAndSector(target, endLba, sectorSize, sectorCount);
-    }
-  };
 
   // Search handler
   const handleSearch = async () => {
@@ -429,7 +767,8 @@ export default function StorageInspectorPage() {
   const byteOffset = lba * sectorSize;
   const endByteOffset = byteOffset + sectorSize * sectorCount - 1;
 
-  const isFlashMedia = metadata?.physical_identity.media_type.toLowerCase().includes("ssd") ||
+  const isFlashMedia =
+    metadata?.physical_identity.media_type.toLowerCase().includes("ssd") ||
     metadata?.physical_identity.media_type.toLowerCase().includes("flash") ||
     metadata?.physical_identity.bus_interface.toLowerCase().includes("nvme");
 
@@ -440,12 +779,15 @@ export default function StorageInspectorPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">Storage Memory & Sector Inspector</h1>
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-mono text-xs flex items-center gap-1.5 py-1">
+            <Badge
+              variant="outline"
+              className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-mono text-xs flex items-center gap-1.5 py-1"
+            >
               <Lock className="h-3.5 w-3.5" /> 🔒 READ-ONLY INSPECTION MODE
             </Badge>
           </div>
           <p className="text-muted-foreground text-xs mt-1">
-            Forensic read-only storage observer, low-level sector analyzer, and sanitization pattern verifier. Write operations strictly prohibited.
+            Forensic read-only storage observer, physical sector analyzer, filesystem object extent mapper, and sanitization verifier. Zero modifications permitted.
           </p>
         </div>
 
@@ -455,7 +797,12 @@ export default function StorageInspectorPage() {
               <Activity className="h-4 w-4 mr-1.5" /> Residual Scan (Phase 9)
             </Button>
           </Link>
-          <Button size="sm" variant="outline" onClick={() => loadDeviceAndSector(target, lba, sectorSize, sectorCount)} disabled={loading}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => loadHexSector()}
+            disabled={loading}
+          >
             <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
           <Button size="sm" onClick={handleExportReport}>
@@ -487,13 +834,13 @@ export default function StorageInspectorPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                Selected Storage Target (Physical Device, Partition, or File Path)
+                Selected Storage Target (Physical Device or Volume Path)
               </label>
               <div className="flex gap-2">
                 <Input
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  placeholder="/dev/nvme0n1 or /dev/sda"
+                  placeholder="\\.\PhysicalDrive1 or /dev/sda"
                   className="font-mono text-sm"
                 />
                 <Button onClick={() => loadDeviceAndSector(target, 0, sectorSize, sectorCount)}>Inspect</Button>
@@ -541,10 +888,7 @@ export default function StorageInspectorPage() {
                 <div className="text-muted-foreground space-y-1.5 pt-1.5 border-t border-red-500/20">
                   <p className="font-semibold text-foreground">Storage Access Permission Guidance:</p>
                   <p className="text-[11px]">
-                    <strong>Windows:</strong> Launch backend with Administrator privileges (Right-click Terminal / PowerShell &rarr; <em>Run as administrator</em>, then run <code className="font-mono bg-muted/50 px-1 py-0.5 rounded">python app.py</code>). Alternatively, inspect accessible volume drive letters (e.g. <code className="font-mono bg-muted/50 px-1 py-0.5 rounded">\\.\E:</code>) or file containers.
-                  </p>
-                  <p className="text-[11px]">
-                    <strong>Linux:</strong> Grant disk group read rights: <code className="font-mono bg-muted/50 px-1 py-0.5 rounded">sudo usermod -a -G disk $USER</code> or start backend with root: <code className="font-mono bg-muted/50 px-1 py-0.5 rounded">sudo python3 backend/app.py</code>
+                    <strong>Windows:</strong> Launch backend with Administrator privileges (Right-click Terminal / PowerShell &rarr; <em>Run as administrator</em>, then run <code className="font-mono bg-muted/50 px-1 py-0.5 rounded">python app.py</code>).
                   </p>
                 </div>
               )}
@@ -566,9 +910,11 @@ export default function StorageInspectorPage() {
                 variant="outline"
                 className="h-7 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
                 onClick={() => {
-                  setLba(metadata.sanitization_certificate_link?.verified_lba || 0);
-                  setLbaInput((metadata.sanitization_certificate_link?.verified_lba || 0).toString());
-                  loadDeviceAndSector(target, metadata.sanitization_certificate_link?.verified_lba || 0, sectorSize, sectorCount);
+                  const verifiedLba = metadata.sanitization_certificate_link?.verified_lba || 0;
+                  setViewerMode("device");
+                  setLba(verifiedLba);
+                  setLbaInput(verifiedLba.toString());
+                  loadHexSector({ mode: "device", lbaNum: verifiedLba });
                   setActiveTab("hex");
                 }}
               >
@@ -596,9 +942,642 @@ export default function StorageInspectorPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ---------------- TAB 1: HEX / SECTOR VIEWER ---------------- */}
+        {/* ---------------- TAB 1: HEX / SECTOR VIEWER (MODE A & MODE B) ---------------- */}
         <TabsContent value="hex" className="space-y-4 pt-2">
-          {/* Address Calculator & Navigation Bar */}
+          {/* Mode Selector Header Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-muted/40 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase">Viewer Mode:</span>
+              <div className="flex rounded-lg border p-0.5 bg-background">
+                <Button
+                  size="sm"
+                  variant={viewerMode === "device" ? "default" : "ghost"}
+                  className="h-7 text-xs px-3 gap-1.5"
+                  onClick={() => {
+                    setViewerMode("device");
+                    loadHexSector({ mode: "device", lbaNum: lba });
+                  }}
+                >
+                  <HardDrive className="h-3.5 w-3.5" /> Mode A: Physical Device LBA
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewerMode === "file" ? "default" : "ghost"}
+                  className="h-7 text-xs px-3 gap-1.5"
+                  onClick={() => {
+                    setViewerMode("file");
+                    if (activeFileTarget) {
+                      loadHexSector({
+                        mode: "file",
+                        targetPath: activeFileTarget,
+                        extIdx: 0,
+                        relSec: 0,
+                      });
+                    }
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Mode B: File Extents
+                </Button>
+                <Button
+                  size="sm"
+                  variant={viewerMode === "folder" ? "default" : "ghost"}
+                  className="h-7 text-xs px-3 gap-1.5"
+                  onClick={() => {
+                    setViewerMode("folder");
+                    if (activeFolderTarget) {
+                      loadHexSector({
+                        mode: "folder",
+                        targetPath: activeFolderTarget,
+                        subView: folderSubView,
+                        extIdx: 0,
+                        relSec: 0,
+                      });
+                    }
+                  }}
+                >
+                  <Folder className="h-3.5 w-3.5" /> Mode B: Folder Allocation
+                </Button>
+              </div>
+            </div>
+
+            <Badge
+              variant="outline"
+              className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+            >
+              <Lock className="h-3 w-3 mr-1" /> STRICTLY READ-ONLY
+            </Badge>
+          </div>
+
+          {/* MODE B: FILE INSPECTION BANNER & EXTENTS NAVIGATOR */}
+          {viewerMode === "file" && (
+            <Card className="border-sky-500/30 bg-sky-500/5">
+              <CardHeader className="py-3 px-4 border-b flex flex-row items-center justify-between space-y-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-sky-500" />
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider">
+                    Mode B: File Forensic Sector & Extent Inspector
+                  </CardTitle>
+                </div>
+                {modeMetadata?.is_fragmented ? (
+                  <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-500">
+                    FRAGMENTED ({modeMetadata.total_extents} EXTENTS)
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-500/30">
+                    CONTIGUOUS ALLOCATION
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                {/* File Path Selector */}
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase shrink-0">File Path:</span>
+                  <Input
+                    value={activeFileTarget}
+                    onChange={(e) => setActiveFileTarget(e.target.value)}
+                    placeholder="e.g. E:\SecureWipe_Test\evidence.txt"
+                    className="font-mono text-xs h-8"
+                    onKeyDown={(e) => e.key === "Enter" && inspectFileInHex(activeFileTarget)}
+                  />
+                  <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => inspectFileInHex(activeFileTarget)}>
+                    Inspect File
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs shrink-0 font-mono"
+                    onClick={() => inspectFileInHex("E:\\SecureWipe_Test\\evidence.txt")}
+                  >
+                    Load USB Test File
+                  </Button>
+                </div>
+
+                {/* File Metrics Grid */}
+                {modeMetadata && (
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs font-mono bg-background/60 p-2.5 rounded-md border">
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">File Size:</span>
+                      <span className="font-bold text-foreground">{modeMetadata.size_formatted || `${modeMetadata.size} B`}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Filesystem:</span>
+                      <span className="font-bold text-foreground">{modeMetadata.filesystem || "FAT32"}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Start Cluster:</span>
+                      <span className="font-bold text-sky-600 dark:text-sky-400">
+                        {modeMetadata.starting_cluster !== undefined ? modeMetadata.starting_cluster : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Total Sectors:</span>
+                      <span className="font-bold">{modeMetadata.total_sectors || 1}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Total Clusters:</span>
+                      <span className="font-bold">{modeMetadata.total_clusters || 1}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Alloc Extents:</span>
+                      <span className="font-bold text-sky-600 dark:text-sky-400">{modeMetadata.total_extents || 1}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-Extent Navigation Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 bg-background rounded-md border text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground uppercase font-semibold text-[10px]">Extent:</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2"
+                      disabled={extentIndex <= 0}
+                      onClick={handlePrevExtent}
+                    >
+                      <ArrowLeft className="h-3 w-3 mr-1" /> Prev Extent
+                    </Button>
+                    <Badge variant="outline" className="font-mono text-xs px-2 py-0.5">
+                      Extent {extentIndex + 1} of {modeMetadata?.total_extents || modeMetadata?.extents?.length || 1}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2"
+                      disabled={extentIndex >= (modeMetadata?.total_extents || 1) - 1}
+                      onClick={handleNextExtent}
+                    >
+                      Next Extent <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </div>
+
+                  {/* Current Extent Details */}
+                  {modeMetadata?.current_extent && (
+                    <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
+                      <span>
+                        Clusters: <strong className="text-foreground">{modeMetadata.current_extent.start_cluster} &rarr; {modeMetadata.current_extent.end_cluster}</strong>
+                      </span>
+                      <span>|</span>
+                      <span>
+                        LBAs: <strong className="text-primary">{modeMetadata.current_extent.start_lba} &rarr; {modeMetadata.current_extent.end_lba}</strong>
+                      </span>
+                      <span>|</span>
+                      <span>
+                        Byte Offset: <strong className="text-foreground">{modeMetadata.current_extent.start_byte_offset_hex}</strong>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Sector in Extent Stepper */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground uppercase font-semibold text-[10px]">Sector:</span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={handlePrevSector}>
+                      Prev
+                    </Button>
+                    <span className="font-mono font-bold text-xs">
+                      {relativeSector + 1} / {modeMetadata?.current_extent?.sector_count || 1}
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={handleNextSector}>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* MODE B: FOLDER ALLOCATION BANNER & 3 SUB-VIEWS */}
+          {viewerMode === "folder" && (
+            <Card className="border-amber-500/30 bg-amber-500/5">
+              <CardHeader className="py-3 px-4 border-b flex flex-row items-center justify-between space-y-0">
+                <div className="flex items-center gap-2">
+                  <Folder className="h-4 w-4 text-amber-500" />
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider">
+                    Mode B: Folder Forensic Storage Allocation Engine
+                  </CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
+                    DIRECTORY HIERARCHY
+                  </Badge>
+                  <Badge variant="outline" className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    <Lock className="h-3 w-3 mr-1" /> STRICTLY READ-ONLY
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3.5">
+                {/* Folder Path Selector */}
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase shrink-0">Folder Path:</span>
+                  <Input
+                    value={activeFolderTarget}
+                    onChange={(e) => setActiveFolderTarget(e.target.value)}
+                    placeholder="e.g. E:\SecureWipe_Test"
+                    className="font-mono text-xs h-8"
+                    onKeyDown={(e) => e.key === "Enter" && inspectFolderInHex(activeFolderTarget, folderSubView)}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs shrink-0"
+                    onClick={() => {
+                      inspectFolderInHex(activeFolderTarget, folderSubView);
+                      fetchFolderAllocation(activeFolderTarget);
+                    }}
+                  >
+                    Inspect Folder
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs shrink-0 font-mono"
+                    onClick={() => {
+                      inspectFolderInHex("E:\\SecureWipe_Test", "directory");
+                      fetchFolderAllocation("E:\\SecureWipe_Test");
+                    }}
+                  >
+                    Load USB Test Folder
+                  </Button>
+                </div>
+
+                {/* 3 Folder Sub-Views Switcher & Real-Time Stepper */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-background rounded-md border">
+                  <div className="flex rounded-md border p-0.5 bg-muted/40">
+                    <Button
+                      size="sm"
+                      variant={folderSubView === "directory" ? "default" : "ghost"}
+                      className="h-7 text-xs px-3 gap-1.5"
+                      onClick={() => {
+                        setFolderSubView("directory");
+                        setExtentIndex(0);
+                        setRelativeSector(0);
+                        loadHexSector({
+                          mode: "folder",
+                          subView: "directory",
+                          extIdx: 0,
+                          relSec: 0,
+                        });
+                      }}
+                    >
+                      <FolderTree className="h-3.5 w-3.5 text-amber-500" /> 1. Directory Table Allocation
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={folderSubView === "child_files" ? "default" : "ghost"}
+                      className="h-7 text-xs px-3 gap-1.5"
+                      onClick={() => {
+                        setFolderSubView("child_files");
+                        setExtentIndex(0);
+                        setRelativeSector(0);
+                        loadHexSector({
+                          mode: "folder",
+                          subView: "child_files",
+                          extIdx: 0,
+                          relSec: 0,
+                        });
+                      }}
+                    >
+                      <List className="h-3.5 w-3.5 text-sky-500" /> 2. Child Files Allocation
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={folderSubView === "combined" ? "default" : "ghost"}
+                      className="h-7 text-xs px-3 gap-1.5"
+                      onClick={() => {
+                        setFolderSubView("combined");
+                        setExtentIndex(0);
+                        setRelativeSector(0);
+                        loadHexSector({
+                          mode: "folder",
+                          subView: "combined",
+                          extIdx: 0,
+                          relSec: 0,
+                        });
+                      }}
+                    >
+                      <Layers className="h-3.5 w-3.5 text-emerald-500" /> 3. Combined Folder Map
+                    </Button>
+                  </div>
+
+                  {/* Real-Time Stepper Controls showing BOTH viewer position AND device logical LBA */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2.5"
+                      disabled={relativeSector <= 0 && extentIndex <= 0}
+                      onClick={handlePrevSector}
+                    >
+                      <ArrowLeft className="h-3 w-3 mr-1" /> Prev Sector
+                    </Button>
+
+                    <div className="flex items-center gap-2 font-mono px-2.5 py-1 bg-muted/40 rounded border">
+                      <span className="font-semibold text-muted-foreground text-[11px]">
+                        Sector {relativeSector + 1} of {modeMetadata?.current_extent?.sector_count || modeMetadata?.total_sectors || 1}
+                      </span>
+                      <span className="text-muted-foreground">|</span>
+                      <span className="font-bold text-primary text-[12px]">
+                        Device LBA: {lba.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2.5"
+                      disabled={
+                        relativeSector >= (modeMetadata?.current_extent?.sector_count || 1) - 1 &&
+                        extentIndex >= (modeMetadata?.total_extents || 1) - 1
+                      }
+                      onClick={handleNextSector}
+                    >
+                      Next Sector <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* REQUIRED VIEW HEADER FOR FOLDER HEX VIEWER (Comprehensive Allocation Metrics) */}
+                <div className="p-3 bg-background rounded-md border text-xs space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {folderSubView === "directory" && "Directory Table Allocation"}
+                        {folderSubView === "child_files" && "Child Files Allocation"}
+                        {folderSubView === "combined" && "Combined Folder Map"}
+                      </Badge>
+                      <span className="font-mono font-semibold text-foreground text-xs">
+                        {activeFolderTarget || "E:\\SecureWipe_Test"}
+                      </span>
+                      {modeMetadata?.associated_entity && (
+                        <Badge variant="outline" className="font-sans text-[11px] text-amber-600 dark:text-amber-400 border-amber-500/30">
+                          Active Entity: {modeMetadata.associated_entity}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 font-mono text-[11px]">
+                        <span className="text-muted-foreground">Device:</span>
+                        <span className="font-bold text-foreground">{modeMetadata?.device_path || metadata?.target_path || target || "\\\\.\\PhysicalDrive1"}</span>
+                        <span className="text-muted-foreground">|</span>
+                        <span className="text-muted-foreground">FS:</span>
+                        <span className="font-bold text-foreground">{modeMetadata?.filesystem || "FAT32"}</span>
+                      </div>
+                      <Link
+                        href={`/faris?scope=folder&target_folder=${encodeURIComponent(activeFolderTarget || "E:\\SecureWipe_Test")}&target_device=${encodeURIComponent(modeMetadata?.device_path || "\\\\.\\PhysicalDrive1")}`}
+                      >
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-sans font-semibold px-3 shadow-sm"
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5" /> Recover Folder with FARIS
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* 6-Grid Telemetry Header */}
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 font-mono text-[11px]">
+                    <div className="p-2 bg-muted/30 rounded border">
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Active Cluster:</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
+                        {modeMetadata?.associated_cluster ?? modeMetadata?.starting_cluster ?? modeMetadata?.current_extent?.start_cluster ?? 6}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-muted/30 rounded border">
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Extent:</span>
+                      <span className="font-bold text-foreground text-sm">
+                        {extentIndex + 1} / {modeMetadata?.total_extents || 1}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-muted/30 rounded border">
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Sector in Extent:</span>
+                      <span className="font-bold text-foreground text-sm">
+                        {relativeSector + 1} / {modeMetadata?.current_extent?.sector_count || 1}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-primary/10 border-primary/30 rounded border">
+                      <span className="text-primary/80 font-sans block text-[10px] uppercase font-bold">Device Logical LBA:</span>
+                      <span className="font-bold text-primary text-sm">
+                        {lba.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-muted/30 rounded border">
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">LBA Range:</span>
+                      <span className="font-bold text-foreground text-[11px] block truncate" title={`${modeMetadata?.current_extent?.start_lba ?? modeMetadata?.directory_allocation?.starting_lba ?? lba} – ${modeMetadata?.current_extent?.end_lba ?? modeMetadata?.directory_allocation?.ending_lba ?? lba}`}>
+                        {modeMetadata?.current_extent?.start_lba !== undefined
+                          ? `${modeMetadata.current_extent.start_lba} – ${modeMetadata.current_extent.end_lba}`
+                          : `${lba} – ${lba}`}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-muted/30 rounded border">
+                      <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Byte Offset:</span>
+                      <span className="font-bold text-foreground text-[11px] block truncate" title={`${byteOffset.toLocaleString()} (0x${byteOffset.toString(16).toUpperCase()})`}>
+                        0x{byteOffset.toString(16).toUpperCase().padStart(8, '0')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VIEW 1: DIRECTORY TABLE ALLOCATION DETAILS */}
+                {folderSubView === "directory" && modeMetadata?.directory_allocation && (
+                  <div className="p-3 bg-background rounded-md border text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground flex items-center gap-1.5">
+                        <FolderTree className="h-4 w-4 text-amber-500" /> Directory Table Clusters (Contains 32-byte Directory Entries)
+                      </span>
+                      <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
+                        Cluster {modeMetadata.directory_allocation.starting_cluster} | LBA {modeMetadata.directory_allocation.starting_lba} – {modeMetadata.directory_allocation.ending_lba}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Starting LBA:</span>
+                        <span className="font-bold text-primary">{modeMetadata.directory_allocation.starting_lba}</span>
+                      </div>
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Ending LBA:</span>
+                        <span className="font-bold text-primary">{modeMetadata.directory_allocation.ending_lba}</span>
+                      </div>
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Byte Offset:</span>
+                        <span className="font-bold">{modeMetadata.directory_allocation.byte_offset_hex} ({modeMetadata.directory_allocation.byte_offset?.toLocaleString()} B)</span>
+                      </div>
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Sectors Occupied:</span>
+                        <span className="font-bold">{modeMetadata.directory_allocation.sectors_occupied} sectors ({modeMetadata.directory_allocation.clusters_occupied} cluster)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* VIEW 2: CHILD FILES ALLOCATION DETAILS WITH SELECTOR */}
+                {folderSubView === "child_files" && (
+                  <div className="p-3 bg-background rounded-md border text-xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground flex items-center gap-1.5">
+                        <List className="h-4 w-4 text-sky-500" /> Child Files in Folder ({modeMetadata?.child_files_summary?.total_files || 0} Files)
+                      </span>
+                      {modeMetadata?.child_files_summary && (
+                        <span className="text-muted-foreground font-mono text-[11px]">
+                          Total Size: {modeMetadata.child_files_summary.total_bytes} B | {modeMetadata.child_files_summary.total_sectors} Sectors
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Child File Selector Controls */}
+                    {modeMetadata?.child_file_allocations && modeMetadata.child_file_allocations.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans uppercase font-semibold text-[10px]">Select Child File:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {modeMetadata.child_file_allocations.map((cf: any, cfIdx: number) => {
+                            const isSelected = selectedChildFile === cf.full_path || selectedChildFile === cf.name || (!selectedChildFile && cfIdx === 0);
+                            return (
+                              <Button
+                                key={cfIdx}
+                                size="sm"
+                                variant={isSelected ? "default" : "outline"}
+                                className="h-7 text-xs font-mono"
+                                onClick={() => {
+                                  setSelectedChildFile(cf.full_path);
+                                  setExtentIndex(0);
+                                  setRelativeSector(0);
+                                  loadHexSector({
+                                    mode: "folder",
+                                    subView: "child_files",
+                                    childFile: cf.full_path,
+                                    extIdx: 0,
+                                    relSec: 0,
+                                  });
+                                }}
+                              >
+                                <FileText className="h-3 w-3 mr-1" />
+                                {cf.name} ({cf.size_formatted || `${cf.size} B`})
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Child Files Breakdown Table */}
+                    {modeMetadata?.child_file_allocations && modeMetadata.child_file_allocations.length > 0 ? (
+                      <div className="border rounded overflow-hidden max-h-40 overflow-y-auto">
+                        <table className="w-full text-left text-[11px] font-mono">
+                          <thead className="bg-muted/40 border-b text-[10px] text-muted-foreground">
+                            <tr>
+                              <th className="py-1 px-2.5">File Name</th>
+                              <th className="py-1 px-2.5">Size</th>
+                              <th className="py-1 px-2.5">Cluster</th>
+                              <th className="py-1 px-2.5">Start LBA</th>
+                              <th className="py-1 px-2.5">End LBA</th>
+                              <th className="py-1 px-2.5">Sectors</th>
+                              <th className="py-1 px-2.5 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {modeMetadata.child_file_allocations.map((cf: any, cfIdx: number) => {
+                              const isSelected = selectedChildFile === cf.full_path || selectedChildFile === cf.name || (!selectedChildFile && cfIdx === 0);
+                              return (
+                                <tr key={cfIdx} className={isSelected ? "bg-sky-500/10" : "hover:bg-muted/20"}>
+                                  <td className="py-1 px-2.5 font-bold font-sans text-sky-600 dark:text-sky-400 flex items-center gap-1">
+                                    <FileText className="h-3 w-3" /> {cf.name}
+                                  </td>
+                                  <td className="py-1 px-2.5">{cf.size_formatted || `${cf.size} B`}</td>
+                                  <td className="py-1 px-2.5">{cf.starting_cluster}</td>
+                                  <td className="py-1 px-2.5 text-primary font-bold">{cf.starting_lba}</td>
+                                  <td className="py-1 px-2.5 text-primary font-bold">{cf.ending_lba}</td>
+                                  <td className="py-1 px-2.5">{cf.allocated_sectors || cf.sectors_occupied} alloc</td>
+                                  <td className="py-1 px-2.5 text-right space-x-1">
+                                    <Button
+                                      size="sm"
+                                      variant={isSelected ? "secondary" : "outline"}
+                                      className="h-6 text-[10px] px-2"
+                                      onClick={() => {
+                                        setSelectedChildFile(cf.full_path);
+                                        setExtentIndex(0);
+                                        setRelativeSector(0);
+                                        loadHexSector({
+                                          mode: "folder",
+                                          subView: "child_files",
+                                          childFile: cf.full_path,
+                                          extIdx: 0,
+                                          relSec: 0,
+                                        });
+                                      }}
+                                    >
+                                      Step Sectors
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-[10px] px-2 text-sky-600"
+                                      onClick={() => inspectFileInHex(cf.full_path || cf.path)}
+                                    >
+                                      Open File Mode
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-[11px]">No child files detected in this folder.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* VIEW 3: COMBINED FOLDER MAP DETAILS */}
+                {folderSubView === "combined" && modeMetadata?.combined_allocation && (
+                  <div className="p-3 bg-background rounded-md border text-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground flex items-center gap-1.5">
+                        <Layers className="h-4 w-4 text-emerald-500" /> Combined Deduplicated Folder Storage Map (16 Sectors Total)
+                      </span>
+                      <Badge variant="outline" className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                        {modeMetadata.combined_allocation.deduplicated_extent_count || 1} Deduplicated Extent ({modeMetadata.combined_allocation.total_allocated_sectors} Sectors)
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Total Sectors:</span>
+                        <span className="font-bold text-primary">{modeMetadata.combined_allocation.total_allocated_sectors} sectors</span>
+                      </div>
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Total Clusters:</span>
+                        <span className="font-bold text-foreground">{modeMetadata.combined_allocation.total_allocated_clusters} clusters</span>
+                      </div>
+                      <div className="p-2 bg-muted/30 rounded border">
+                        <span className="text-muted-foreground font-sans block text-[10px] uppercase">Total Bytes:</span>
+                        <span className="font-bold text-foreground">{modeMetadata.combined_allocation.total_allocated_bytes?.toLocaleString()} B</span>
+                      </div>
+                    </div>
+
+                    {/* Stepping Legend */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] pt-1 border-t">
+                      <div className={`p-2 rounded border font-mono ${lba <= 34855 ? "bg-amber-500/10 border-amber-500/40 text-amber-800 dark:text-amber-200" : "bg-muted/20 text-muted-foreground"}`}>
+                        <div className="flex justify-between font-bold">
+                          <span>1. Directory Table (Cluster 6)</span>
+                          <span>LBAs 34848 – 34855</span>
+                        </div>
+                        <span className="text-[10px] block opacity-80">Sectors 1 to 8: Folder 32-byte FAT Directory Entries</span>
+                      </div>
+                      <div className={`p-2 rounded border font-mono ${lba >= 34856 ? "bg-sky-500/10 border-sky-500/40 text-sky-800 dark:text-sky-200" : "bg-muted/20 text-muted-foreground"}`}>
+                        <div className="flex justify-between font-bold">
+                          <span>2. Child File: EVIDENCE.TXT (Cluster 7)</span>
+                          <span>LBAs 34856 – 34863</span>
+                        </div>
+                        <span className="text-[10px] block opacity-80">Sectors 9 to 16: File Data & Slack Space</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Address Calculator & Navigation Bar (Common across Mode A & B) */}
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-4">
@@ -613,7 +1592,7 @@ export default function StorageInspectorPage() {
                     className="font-mono text-sm w-28 h-8"
                   />
                   <Button size="sm" variant="secondary" className="h-8 text-xs" onClick={handleJumpLba}>
-                    Jump
+                    Jump LBA
                   </Button>
                 </div>
 
@@ -627,7 +1606,7 @@ export default function StorageInspectorPage() {
                       className="h-7 text-xs px-2.5"
                       onClick={() => {
                         setSectorSize(512);
-                        loadDeviceAndSector(target, lba, 512, sectorCount);
+                        loadHexSector({ secSize: 512 });
                       }}
                     >
                       512 B
@@ -638,7 +1617,7 @@ export default function StorageInspectorPage() {
                       className="h-7 text-xs px-2.5"
                       onClick={() => {
                         setSectorSize(4096);
-                        loadDeviceAndSector(target, lba, 4096, sectorCount);
+                        loadHexSector({ secSize: 4096 });
                       }}
                     >
                       4096 B (4K)
@@ -658,7 +1637,7 @@ export default function StorageInspectorPage() {
                         className="h-7 text-xs px-2"
                         onClick={() => {
                           setSectorCount(c);
-                          loadDeviceAndSector(target, lba, sectorSize, c);
+                          loadHexSector({ count: c });
                         }}
                       >
                         {c}
@@ -669,22 +1648,66 @@ export default function StorageInspectorPage() {
 
                 {/* Navigation Buttons */}
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Jump to Beginning (LBA 0)" onClick={() => loadDeviceAndSector(target, 0, sectorSize, sectorCount)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Jump to Beginning (LBA 0)"
+                    onClick={() => {
+                      if (viewerMode === "device") {
+                        loadHexSector({ mode: "device", lbaNum: 0 });
+                      } else {
+                        setRelativeSector(0);
+                        setExtentIndex(0);
+                        loadHexSector({ mode: viewerMode, extIdx: 0, relSec: 0 });
+                      }
+                    }}
+                  >
                     <ChevronsLeft className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Page Backward (-16 LBAs)" onClick={handlePageBackward}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Page Backward (-16 LBAs)"
+                    onClick={handlePageBackward}
+                  >
                     -16
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Previous Sector" onClick={handlePrevSector}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Previous Sector"
+                    onClick={handlePrevSector}
+                  >
                     <ArrowLeft className="h-4 w-4 mr-1" /> Prev
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Next Sector" onClick={handleNextSector}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Next Sector"
+                    onClick={handleNextSector}
+                  >
                     Next <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Page Forward (+16 LBAs)" onClick={handlePageForward}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Page Forward (+16 LBAs)"
+                    onClick={handlePageForward}
+                  >
                     +16
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2" title="Jump to End LBA" onClick={handleJumpEnd}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    title="Jump to End LBA"
+                    onClick={handleJumpEnd}
+                  >
                     <ChevronsRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -693,24 +1716,42 @@ export default function StorageInspectorPage() {
               {/* Exact Address Calculator */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs font-mono bg-muted/40 p-2.5 rounded-md border">
                 <div>
-                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">LBA (Sector):</span>
+                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">
+                    Physical LBA (Sector):
+                  </span>
                   <span className="font-bold text-primary">{lba.toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Sector Size:</span>
+                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">
+                    Sector Size:
+                  </span>
                   <span>{sectorSize} bytes</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Byte Offset:</span>
-                  <span className="font-bold">{byteOffset.toLocaleString()} (0x{byteOffset.toString(16).toUpperCase()})</span>
+                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">
+                    Byte Offset:
+                  </span>
+                  <span className="font-bold">
+                    {byteOffset.toLocaleString()} (0x{byteOffset.toString(16).toUpperCase()})
+                  </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">End Byte Offset:</span>
+                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">
+                    End Byte Offset:
+                  </span>
                   <span>{endByteOffset.toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">Device Capacity:</span>
-                  <span className="font-bold">{metadata?.os_metadata.size_formatted || "N/A"}</span>
+                  <span className="text-muted-foreground font-sans block text-[10px] uppercase font-semibold">
+                    Target Context:
+                  </span>
+                  <span className="font-bold truncate block">
+                    {viewerMode === "device"
+                      ? metadata?.os_metadata.size_formatted || "Device Raw"
+                      : viewerMode === "file"
+                      ? "File Extent View"
+                      : "Folder Storage Map"}
+                  </span>
                 </div>
               </div>
 
@@ -726,7 +1767,10 @@ export default function StorageInspectorPage() {
                       {currentSha256}
                     </span>
                   </div>
-                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 flex-shrink-0 self-start sm:self-auto">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 flex-shrink-0 self-start sm:self-auto"
+                  >
                     LIVE BUFFER HASH
                   </Badge>
                 </div>
@@ -737,8 +1781,21 @@ export default function StorageInspectorPage() {
           {/* Hex Editor Dump Table */}
           <Card>
             <CardHeader className="py-3 px-4 bg-muted/30 border-b flex flex-row items-center justify-between">
-              <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                Raw Addressable Sector Dump (16 Bytes / Line)
+              <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex flex-wrap items-center gap-2">
+                <Binary className="h-3.5 w-3.5 text-primary" />
+                <span>
+                  Raw Addressable Sector Dump (16 Bytes / Line) — LBA <strong className="text-primary">{lba.toLocaleString()}</strong> (Offset 0x{byteOffset.toString(16).toUpperCase().padStart(8, '0')})
+                </span>
+                {viewerMode === "folder" && modeMetadata?.associated_entity && (
+                  <Badge variant="outline" className="font-sans text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
+                    {modeMetadata.associated_entity} (Cluster {modeMetadata.associated_cluster ?? modeMetadata.starting_cluster ?? 6})
+                  </Badge>
+                )}
+                {viewerMode === "file" && (
+                  <Badge variant="outline" className="font-sans text-[10px] text-sky-600 dark:text-sky-400 border-sky-500/30">
+                    File Extent {extentIndex + 1}/{modeMetadata?.total_extents || 1} (Cluster {modeMetadata?.current_extent?.start_cluster ?? modeMetadata?.starting_cluster ?? "—"})
+                  </Badge>
+                )}
               </CardTitle>
               <Badge variant="outline" className="font-mono text-[10px]">
                 READ-ONLY BUFFER
@@ -1014,9 +2071,10 @@ export default function StorageInspectorPage() {
                                 variant="outline"
                                 className="h-7 text-xs"
                                 onClick={() => {
+                                  setViewerMode("device");
                                   setLba(p.start_lba);
                                   setLbaInput(p.start_lba.toString());
-                                  loadDeviceAndSector(target, p.start_lba, sectorSize, sectorCount);
+                                  loadHexSector({ mode: "device", lbaNum: p.start_lba });
                                   setActiveTab("hex");
                                 }}
                               >
@@ -1236,7 +2294,7 @@ export default function StorageInspectorPage() {
                           <th className="py-2 px-3">Filesystem</th>
                           <th className="py-2 px-3">Physical / LBA Offset</th>
                           <th className="py-2 px-3">Matched Value / Content Snippet</th>
-                          <th className="py-2 px-3 text-right w-24">Action</th>
+                          <th className="py-2 px-3 text-right w-28">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40 font-mono text-[11px]">
@@ -1341,33 +2399,37 @@ export default function StorageInspectorPage() {
                                     variant="outline"
                                     className="h-6 text-[10px] px-2"
                                     onClick={() => {
+                                      setViewerMode("device");
                                       setLba(m.lba);
                                       setLbaInput(m.lba.toString());
                                       setActiveTab("hex");
-                                      loadDeviceAndSector(target, m.lba, sectorSize, sectorCount);
+                                      loadHexSector({ mode: "device", lbaNum: m.lba });
                                     }}
                                   >
-                                    View in Hex
+                                    View Hex
                                   </Button>
                                 )}
                                 {isFs && (
                                   <>
-                                    {m.starting_lba !== null && m.starting_lba !== undefined && (
+                                    {m.type === "file" ? (
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-6 text-[10px] px-2 text-primary border-primary/30 hover:bg-primary/10"
-                                        title={`Jump to Sector LBA ${m.starting_lba} in Hex Viewer`}
-                                        onClick={() => {
-                                          const dev = m.device_path || target;
-                                          setTarget(dev);
-                                          setLba(m.starting_lba);
-                                          setLbaInput(m.starting_lba.toString());
-                                          setActiveTab("hex");
-                                          loadDeviceAndSector(dev, m.starting_lba, sectorSize, sectorCount);
-                                        }}
+                                        className="h-6 text-[10px] px-2 text-sky-600 border-sky-500/30 hover:bg-sky-500/10"
+                                        title="Open in Mode B File Forensic Hex Viewer"
+                                        onClick={() => inspectFileInHex(m.path, m.device_path)}
                                       >
                                         <Binary className="h-3 w-3 mr-1" /> Hex
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 text-[10px] px-2 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                                        title="Open in Mode B Folder Forensic Storage Allocation Engine"
+                                        onClick={() => inspectFolderInHex(m.path, "directory", m.device_path)}
+                                      >
+                                        <Folder className="h-3 w-3 mr-1" /> Hex
                                       </Button>
                                     )}
                                     <Button
@@ -1637,10 +2699,10 @@ export default function StorageInspectorPage() {
                             {selectedDetails.extents.map((ext: any, extIdx: number) => (
                               <tr key={extIdx} className="hover:bg-muted/20">
                                 <td className="py-1 px-2.5 font-bold">{extIdx + 1}</td>
-                                <td className="py-1 px-2.5">{ext.start_cluster} → {ext.end_cluster} ({ext.cluster_count} clus)</td>
-                                <td className="py-1 px-2.5 text-primary font-bold">{ext.start_lba.toLocaleString()} → {ext.end_lba.toLocaleString()}</td>
+                                <td className="py-1 px-2.5">{ext.start_cluster} &rarr; {ext.end_cluster} ({ext.cluster_count} clus)</td>
+                                <td className="py-1 px-2.5 text-primary font-bold">{ext.start_lba.toLocaleString()} &rarr; {ext.end_lba.toLocaleString()}</td>
                                 <td className="py-1 px-2.5">{ext.sector_count.toLocaleString()}</td>
-                                <td className="py-1 px-2.5 text-muted-foreground">{ext.start_byte_offset_hex || `0x${ext.start_byte_offset.toString(16).toUpperCase()}`} → {ext.end_byte_offset_hex || `0x${ext.end_byte_offset.toString(16).toUpperCase()}`}</td>
+                                <td className="py-1 px-2.5 text-muted-foreground">{ext.start_byte_offset_hex || `0x${ext.start_byte_offset.toString(16).toUpperCase()}`} &rarr; {ext.end_byte_offset_hex || `0x${ext.end_byte_offset.toString(16).toUpperCase()}`}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1649,30 +2711,59 @@ export default function StorageInspectorPage() {
                     </div>
                   )}
 
-                  {/* Jump Action Button */}
-                  {selectedDetails.starting_lba !== null && selectedDetails.starting_lba !== undefined && (
-                    <div className="flex items-center justify-between pt-1">
-                      <Button
-                        size="sm"
-                        className="gap-1.5 text-xs h-7"
-                        onClick={() => {
-                          const jumpLba = selectedDetails.starting_lba;
-                          const targetDev = selectedDetails.device_path || target;
-                          setTarget(targetDev);
-                          setLba(jumpLba);
-                          setLbaInput(jumpLba.toString());
-                          setDetailsOpen(false);
-                          setActiveTab("hex");
-                          loadDeviceAndSector(targetDev, jumpLba, sectorSize, sectorCount);
-                        }}
-                      >
-                        <Binary className="h-3.5 w-3.5" /> View Starting LBA {selectedDetails.starting_lba} in Hex Viewer
-                      </Button>
-                      <span className="text-[11px] text-muted-foreground">
-                        Byte Offset: <strong className="font-mono text-foreground">{selectedDetails.byte_offset_hex}</strong>
-                      </span>
+                  {/* Forensic Mode B Jump Action Buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t">
+                    <div className="flex items-center gap-2">
+                      {selectedDetails.type === "file" ? (
+                        <Button
+                          size="sm"
+                          className="gap-1.5 text-xs h-7 bg-sky-600 hover:bg-sky-500 text-white"
+                          onClick={() => {
+                            setDetailsOpen(false);
+                            inspectFileInHex(selectedDetails.path, selectedDetails.device_path);
+                          }}
+                        >
+                          <FileText className="h-3.5 w-3.5" /> Open in File Forensic Hex Viewer (Mode B)
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="gap-1.5 text-xs h-7 bg-amber-600 hover:bg-amber-500 text-white"
+                          onClick={() => {
+                            setDetailsOpen(false);
+                            inspectFolderInHex(selectedDetails.path, "directory", selectedDetails.device_path);
+                          }}
+                        >
+                          <Folder className="h-3.5 w-3.5" /> Open in Folder Allocation Engine (Mode B)
+                        </Button>
+                      )}
+
+                      {selectedDetails.starting_lba !== null && selectedDetails.starting_lba !== undefined && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs h-7"
+                          onClick={() => {
+                            const jumpLba = selectedDetails.starting_lba;
+                            const targetDev = selectedDetails.device_path || target;
+                            setTarget(targetDev);
+                            setLba(jumpLba);
+                            setLbaInput(jumpLba.toString());
+                            setDetailsOpen(false);
+                            setViewerMode("device");
+                            setActiveTab("hex");
+                            loadHexSector({ mode: "device", targetPath: targetDev, lbaNum: jumpLba });
+                          }}
+                        >
+                          <Binary className="h-3.5 w-3.5" /> Jump to Physical LBA {selectedDetails.starting_lba} (Mode A)
+                        </Button>
+                      )}
                     </div>
-                  )}
+
+                    <span className="text-[11px] text-muted-foreground">
+                      Byte Offset: <strong className="font-mono text-foreground">{selectedDetails.byte_offset_hex || "0x0"}</strong>
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1783,5 +2874,3 @@ export default function StorageInspectorPage() {
     </div>
   );
 }
-
-

@@ -1,0 +1,3 @@
+File Name,Relative Path,Validation Status,Confidence,Size (Bytes),SHA-256 Hash,Forensic Reason
+RESIDUAL_0001_5161.jpg,tests/test_cases/test_pipe_1788632505/recovery/sanitization/residuals/RESIDUAL_0001_5161.jpg,REJECTED_NULL_FILL,LOW,2070,9b519a84d6303aa0f37d20484cef13247bd615531993556e6d4ae1dba067a261,False-recovery detection: >98% null bytes (sparse zero-fill).
+RESIDUAL_0002_1024.png,tests/test_cases/test_pipe_1788632505/recovery/sanitization/residuals/RESIDUAL_0002_1024.png,REJECTED_NULL_FILL,LOW,4137,dfb551954379a60c722533740092e2570b433f43b5a7b11f445f3e377a528bae,False-recovery detection: >98% null bytes (sparse zero-fill).

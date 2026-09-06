@@ -1,0 +1,99 @@
+{
+  "faris_version": "1.0.0",
+  "engine": "FARIS Folder-Level Forensic Recovery Engine",
+  "report_generated_at": "2026-09-05T18:44:37.819195+00:00",
+  "case_id": "test_fld_1788633877770_hash",
+  "examiner": "Hash Verifier",
+  "scope": "FOLDER",
+  "source_folder": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpulxn686o\\HashTest",
+  "scope_info": {
+    "status": "SUCCESS",
+    "is_allocation_available": true,
+    "scope_type": "FOLDER",
+    "folder_name": "HashTest",
+    "full_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpulxn686o\\HashTest",
+    "filesystem": "Filesystem Managed",
+    "device_path": "",
+    "partition_start_lba": null,
+    "bytes_per_sector": 512,
+    "sectors_per_cluster": 8,
+    "directory_allocation": {
+      "starting_cluster": null,
+      "cluster_chain_list": [],
+      "cluster_chain": "Unavailable (OS Managed)",
+      "sectors_occupied": 0,
+      "clusters_occupied": 0,
+      "bytes_occupied": 0,
+      "extents": [],
+      "starting_lba": null,
+      "ending_lba": null,
+      "byte_offset": null,
+      "byte_offset_hex": "Unavailable"
+    },
+    "child_files": [
+      {
+        "name": "sample.bin",
+        "relative_path": "sample.bin",
+        "full_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpulxn686o\\HashTest\\sample.bin",
+        "is_dir": false,
+        "size": 43,
+        "starting_cluster": null,
+        "cluster_chain": "OS Managed",
+        "cluster_chain_list": [],
+        "starting_lba": null,
+        "ending_lba": null,
+        "byte_offset": null,
+        "byte_offset_hex": "Unavailable",
+        "sectors_occupied": 1,
+        "clusters_occupied": 1,
+        "allocated_sectors": 1,
+        "allocated_clusters": 1,
+        "extents": [],
+        "is_fragmented": false
+      }
+    ],
+    "child_files_count": 1,
+    "child_files_total_bytes": 43,
+    "child_files_total_sectors": 1,
+    "child_files_total_clusters": 1,
+    "combined_storage_map": {
+      "starting_lba": null,
+      "ending_lba": null,
+      "total_sectors": 1,
+      "total_clusters": 1,
+      "total_bytes": 43,
+      "extents_count": 0,
+      "extents": [],
+      "is_fragmented": false
+    },
+    "mapping_layer": "Filesystem Driver Layer",
+    "allocation_disclaimer": "Standard filesystem enumeration. Direct block-level LBA mapping abstracted.",
+    "resolved_at": "2026-09-05T18:44:37.786684+00:00"
+  },
+  "destination_root": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpdn3byyif\\test_fld_1788633877770_hash\\recovery\\folder\\HashTest",
+  "summary": {
+    "total_items": 1,
+    "pass1_fs_recovered": 1,
+    "pass2_carved": 0,
+    "total_bytes_recovered": 43
+  },
+  "recovered_artifacts": [
+    {
+      "name": "sample.bin",
+      "relative_path": "sample.bin",
+      "destination_path": "C:\\Users\\PRATHAN\\AppData\\Local\\Temp\\tmpdn3byyif\\test_fld_1788633877770_hash\\recovery\\folder\\HashTest\\sample.bin",
+      "status": "RECOVERED",
+      "size_bytes": 43,
+      "sha256": "1f03bda5c3cd6994558c4338f632b29ceab69ff2b636978a7bd58fe7cb18d415",
+      "starting_cluster": null,
+      "cluster_chain": "OS Managed",
+      "starting_lba": null,
+      "ending_lba": null,
+      "allocated_sectors": 1,
+      "allocated_clusters": 1,
+      "extents": [],
+      "integrity_verified": true,
+      "recovery_source": "Pass 1 (Filesystem Allocation)"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "case_id": "test_pipe_1788675923",
+  "image": "test_svc_evidence.raw",
+  "partition_count": 0,
+  "partitions": [],
+  "filesystems": [],
+  "primary_partition_offset": 0,
+  "all_partition_offsets": [
+    0
+  ],
+  "memory_analysis": {
+    "is_memory": true,
+    "status": "MEMORY_EVIDENCE_DETECTED",
+    "evidence_type": "Physical / Virtual Memory",
+    "notes": "Evidence requires Volatility / memory inspection pipeline."
+  }
+}

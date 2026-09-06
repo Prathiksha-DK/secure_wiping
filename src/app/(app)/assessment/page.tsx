@@ -162,6 +162,14 @@ export default function AssessmentPage() {
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState<string>("IDLE");
   const [report, setReport] = useState<AssessmentReport | null>(null);
+  const [liveMetrics, setLiveMetrics] = useState<{
+    current_lba?: number;
+    scan_rate_mb_s?: number;
+    elapsed_seconds?: number;
+    eta_seconds?: number;
+    current_region?: string;
+    matches_count?: number;
+  }>({});
 
   // Byte Inspector State
   const [inspectorOffset, setInspectorOffset] = useState<number>(0);
@@ -219,6 +227,20 @@ export default function AssessmentPage() {
     }
   };
 
+  const cancelAssessment = async () => {
+    if (!currentAssessmentId) return;
+    try {
+      await fetch(`${BACKEND_URL}/api/assessment/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assessment_id: currentAssessmentId }),
+      });
+      toast({ title: "Cancellation Requested", description: "Stopping residual assessment scan..." });
+    } catch (e) {
+      console.error("Cancel error:", e);
+    }
+  };
+
   const startAssessment = async () => {
     if (!selectedTarget) {
       toast({ title: "Target Required", description: "Please select a valid storage device or forensic image.", variant: "destructive" });
@@ -228,6 +250,7 @@ export default function AssessmentPage() {
     setIsScanning(true);
     setScanProgress(0);
     setScanStatus("INITIALIZING");
+    setLiveMetrics({});
     setReport(null);
     setCertData(null);
     setCertVerified(null);
@@ -265,6 +288,14 @@ export default function AssessmentPage() {
             const sData = await statusRes.json();
             setScanProgress(sData.progress_pct || 0);
             setScanStatus(sData.status);
+            setLiveMetrics({
+              current_lba: sData.current_lba,
+              scan_rate_mb_s: sData.scan_rate_mb_s,
+              elapsed_seconds: sData.elapsed_seconds,
+              eta_seconds: sData.eta_seconds,
+              current_region: sData.current_region,
+              matches_count: sData.matches_count,
+            });
 
             if (sData.status === "COMPLETED" || sData.status === "ERROR" || sData.status === "CANCELLED") {
               clearInterval(pollInterval);
@@ -282,7 +313,7 @@ export default function AssessmentPage() {
         } catch (pollErr) {
           console.error("Poll error:", pollErr);
         }
-      }, 600);
+      }, 500);
     } catch (e: any) {
       setIsScanning(false);
       setScanStatus("ERROR");
